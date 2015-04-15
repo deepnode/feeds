@@ -1,0 +1,17 @@
+[
+	{"source": "WinNetMon",
+		"addr1": [
+			{"type": "literal", "value": "localhost"},
+			{"type": "getFilePart", "value": "ProcessName"},
+			{"type": "eventattr", "value": "Protocol"},
+			{"type": "truncPort", "value": "LocalPort"}],
+		"addr2": [
+			{"type": "getLocation", "value": "RemoteAddress"},
+			{"type": "eventattr", "value": "RemoteAddress"},
+			{"type": "truncPort", "value": "RemotePort"}
+		],
+		"direction": {"type": "eventattr", "value": "Direction"},
+		"addr1to2": "outbound",
+		"measure": {"type": "eventattr", "value": "HeaderSizeBytes"}
+	}
+]

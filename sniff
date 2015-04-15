@@ -1,0 +1,2 @@
+CLASSPATH=.:lib/jpcap.jar; export CLASSPATH
+nohup java com.threeshell.Probe $1 > sniff.log &

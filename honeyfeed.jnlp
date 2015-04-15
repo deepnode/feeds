@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jnlp spec="1.0+" href="honeyfeed.jnlp" codebase="http://deepnode.us/apps">
+    <information>
+        <title>Deep Node Honeypot Feed</title>
+        <vendor>Deep Node, Inc.</vendor>
+    </information>
+    <offline-allowed />
+    <update check="background" />
+    <security>
+        <all-permissions />
+    </security>
+    <resources>
+        <!-- Application Resources -->
+        <j2se version="1.6+"
+              href="http://java.sun.com/products/autodl/j2se"/>
+        <jar href="lib/3sh3ll_probe.jar"
+            main="true" />
+    </resources>
+    <application-desc
+         name="Deep Node Honeypot Feed"
+         main-class=
+           "com.threeshell.HoneyFeed"
+         width="300"
+         height="300">
+     </application-desc>
+</jnlp>

@@ -1,0 +1,1 @@
+/home/arkowitz/barnyard2-1.9/src/barnyard2 -c /home/arkowitz/barnyard2-1.9/etc/barnyard2.conf -o $1

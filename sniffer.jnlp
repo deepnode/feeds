@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jnlp spec="1.0+" href="sniffer.jnlp" codebase="http://deepnode.us/apps">
+    <information>
+        <title>Sniffer Feed</title>
+        <vendor>Deep Node, Inc.</vendor>
+    </information>
+    <offline-allowed />
+    <update check="background" />
+    <security>
+        <all-permissions />
+    </security>
+    <resources>
+        <!-- Application Resources -->
+        <j2se version="1.6+"
+              href="http://java.sun.com/products/autodl/j2se"/>
+        <jar href="lib/3sh3ll_probe.jar"
+             main="true" />
+        <jar href="lib/jnetpcap.jar" />
+        <nativelib href="lib/jnetpcap_lib.jar" />
+    </resources>
+    <application-desc
+         name="Sniffer Feed"
+         main-class=
+           "com.threeshell.Probelet"
+         width="300"
+         height="300">
+     </application-desc>
+</jnlp>

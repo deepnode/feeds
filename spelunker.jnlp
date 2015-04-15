@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jnlp spec="1.0+" href="spelunker.jnlp" codebase="http://deepnode.us/apps">
+    <information>
+        <title>SPeLUNKer</title>
+        <vendor>Deep Node, Inc.</vendor>
+    </information>
+    <offline-allowed />
+    <update check="background" />
+    <security>
+        <all-permissions />
+    </security>
+    <resources>
+        <!-- Application Resources -->
+        <j2se version="1.6+"
+              href="http://java.sun.com/products/autodl/j2se"/>
+        <jar href="lib/3sh3ll_probe.jar"
+             main="true" />
+        <jar href="lib/jackson-core-asl-1.8.5.jar" />
+        <jar href="lib/jackson-mapper-asl-1.8.5.jar" />
+        <jar href="lib/splunk-1.3.1.jar" />
+    </resources>
+    <application-desc
+         name="SPeLUNKer"
+         main-class=
+           "com.threeshell.SplunkIngest"
+         width="300"
+         height="300">
+     </application-desc>
+</jnlp>
