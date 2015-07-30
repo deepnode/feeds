@@ -6,6 +6,7 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.net.*;
 import java.net.UnknownHostException;
+import java.util.zip.DeflaterOutputStream;
 import java.text.*;
 
 import org.codehaus.jackson.JsonParseException;
@@ -259,7 +260,7 @@ public class AppDynamicsIngest extends JFrame {
         }
 
         Socket s = new Socket("localhost", 4021);
-        pw = new PrintWriter(new OutputStreamWriter(s.getOutputStream()));
+        pw = new PrintWriter(new OutputStreamWriter(new DeflaterOutputStream(s.getOutputStream(), true)));
         pw.println("appdynamics_ingest");
         pw.flush();
 

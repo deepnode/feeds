@@ -3,11 +3,13 @@ package com.threeshell;
 import java.io.*;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.zip.DeflaterOutputStream;
 
 public class ExampleFeed {
 
   private PrintWriter pw;
   private BufferedReader br;
+  private long nextId = 1;
 
   public static void main ( String[] args ) {
     try {
@@ -24,7 +26,7 @@ public class ExampleFeed {
       Socket s = null;
       try {
         s = new Socket("localhost", 4021);
-        pw = new PrintWriter(new OutputStreamWriter(s.getOutputStream()));
+        pw = new PrintWriter(new OutputStreamWriter(new DeflaterOutputStream(s.getOutputStream(), true)));
         br = new BufferedReader(new InputStreamReader(s.getInputStream()));
         pw.println("example_feed");
         pw.flush();
@@ -89,14 +91,15 @@ public class ExampleFeed {
       if ( rd > .5d && rd < .52d )
         tag = "tag3";
 
+      String idAndTs = String.valueOf(nextId) + '\t' + String.valueOf(System.currentTimeMillis()) + '\t';
+      nextId++;
       if ( toggle )
-        pw.println("mars|olympus|bob|session" + bobSess + "\tvenus|newdc|alice|session" +
+        pw.println(idAndTs + "mars|olympus|bob|session" + bobSess + "\tvenus|newdc|alice|session" +
 		   aliceSess + "\t" + size + "|" + level + "\t" + tag);
       else
-        pw.println("venus|newdc|alice|session" + aliceSess + "\tmars|olympus|bob|session" +
+        pw.println(idAndTs + "venus|newdc|alice|session" + aliceSess + "\tmars|olympus|bob|session" +
                    bobSess + "\t" + size + "|" + level + "\t" + tag);
-      pw.flush();
-      Thread.sleep(200);
+      Thread.sleep(100);
     }
   }
 }

@@ -9,6 +9,7 @@ import java.util.*;
 import java.io.*;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.zip.DeflaterOutputStream;
 import java.text.SimpleDateFormat;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -246,7 +247,7 @@ public class SysadminDemo extends JFrame implements Runnable {
       Socket s = null;
       try {
         s = new Socket("localhost", 4021);
-        pw = new PrintWriter(new OutputStreamWriter(s.getOutputStream()));
+        pw = new PrintWriter(new OutputStreamWriter(new DeflaterOutputStream(s.getOutputStream(), true)));
         br = new BufferedReader(new InputStreamReader(s.getInputStream()));
         pw.println("demo_alert");
         pw.flush();

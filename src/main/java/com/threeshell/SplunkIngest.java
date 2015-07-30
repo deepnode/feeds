@@ -6,6 +6,7 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.net.*;
 import java.net.UnknownHostException;
+import java.util.zip.DeflaterOutputStream;
 import java.text.*;
 
 import org.codehaus.jackson.JsonParseException;
@@ -273,7 +274,7 @@ public class SplunkIngest extends JFrame {
 	ResultsReaderJson resultsReader = new ResultsReaderJson(exportSearch);
 
         Socket s = new Socket(consoleAddr, 4021);
-        pw = new PrintWriter(new OutputStreamWriter(s.getOutputStream()));
+        pw = new PrintWriter(new OutputStreamWriter(new DeflaterOutputStream(s.getOutputStream(), true)));
         pw.println("splunk_ingest");
         pw.flush();
 
