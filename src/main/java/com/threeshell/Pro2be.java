@@ -303,6 +303,7 @@ public class Pro2be implements Runnable {
 
   public void tcpdump () throws IOException {
     startMon();
+    //outQueue.offer("__cg_ingest");
     Sniffer sniff = new Sniffer(this, tcpdumpField.getText(), true);
     Thread sniffThread = new Thread(sniff);
     sniffThread.start();
@@ -330,6 +331,27 @@ public class Pro2be implements Runnable {
   public static String buildNALine ( String addr, String name, String value, String type ) {
     String msg = "__na_3\t" + addr + "\t" + name + "\t" + value + "\t" + type;
     return msg;
+  }
+
+  public void loadFile ( String fname ) throws UnknownHostException, IOException, SecurityException,
+                           ParseException, InterruptedException {
+    int port = Integer.parseInt(portField.getText());
+    Socket sload = new Socket(addrField.getText(), port);
+    PrintWriter loadpw = new PrintWriter(new OutputStreamWriter(new DeflaterOutputStream(sload.getOutputStream(), true)));
+    loadpw.println("playback");
+    loadpw.flush();
+    loadpw.println("__cg_ingest");
+    loadpw.flush();
+
+    BufferedReader br = new BufferedReader(new FileReader(fname));
+    String line = null;
+    while ( (line = br.readLine()) != null ) {
+      loadpw.println(line);
+    }
+
+    loadpw.close();
+    sload.close();
+    br.close();
   }
 
   public void daemon () throws UnknownHostException, IOException, SecurityException,
@@ -1176,7 +1198,7 @@ public class Pro2be implements Runnable {
 
       int harvested = 0;
       StringBuilder res = new StringBuilder();
-      for ( int i = buf.length - 40; i < buf.length; i++ ) {
+      for ( int i = 30; i < buf.length; i++ ) {
         char c = (char)buf[i];
         if ( isInRange(c) ) {
           res.append(c);
@@ -1184,12 +1206,12 @@ public class Pro2be implements Runnable {
             System.out.print(c);
         }
         else {
-          if ( res.length() >= 3 )
+          if ( res.length() >= 4 )
             break;
           res = new StringBuilder();
         }
 
-        if ( res.length() >= 10 || i >= 40 )
+        if ( res.length() >= 10 || i >= 120 )
           break;
       }
 
