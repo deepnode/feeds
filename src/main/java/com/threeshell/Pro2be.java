@@ -38,20 +38,29 @@ public class Pro2be implements Runnable {
   private Hashtable<String, String> domainMap = new Hashtable<String, String>();
   private Hashtable<String, NodeAttrs> nodeAttrs = new Hashtable<String, NodeAttrs>();
   private boolean isWindows = false;
+  private String domainFname = "pro2be_domains.txt";
+  private String filterFname = "pro2be_filters.txt";
+
   public JTextField addrField = new JTextField("localhost", 30);
   public JTextField portField = new JTextField("4021", 10);
-  public JTextField snortField = new JTextField("c:\\snort\\bin\\snort -c c:\\snort\\etc\\snort.conf -K none -i 3 -d -A console", 30);
-  public JTextField tcpdumpField = new JTextField("windump -tt -n -e -xx -s 65535 -i 1", 30);
+  public JTextField snortField = new JTextField(" -K none -i 3 -d -A console", 34);
+  public JTextField tcpdumpField = new JTextField("dump -tt -n -e -xx -s 65535 -r yourpcap.pcap", 30);
 
   private long nextMsgId = 1l;
   private TreeMap<Long, PacketHolder> packetCache = new TreeMap<Long, PacketHolder>();
+  private long totalPacketBytes = 0l;
   public String overrideDir;
   public String configFname;
+
   public InternalNet[] internalNets = null;
+  public HashSet<String> localIps = null;
+
   public LinkedBlockingQueue<String> outQueue = new LinkedBlockingQueue<String>(8000);
   public LinkedBlockingQueue<String> nodeAttrQueue = new LinkedBlockingQueue<String>(1000);
   public LinkedList<FeedSender> feedSenders = new LinkedList<FeedSender>();
   public Hashtable<String, MacPair> macCache = new Hashtable<String, MacPair>();
+  private ProbeFilter[] filters = null;
+  private ProbeFilter[] flags = null;
 
   private Snorter snort = null;
   private Thread snortThread = null;
@@ -63,16 +72,17 @@ public class Pro2be implements Runnable {
   public boolean doCountry = false;
   public boolean snarfPackets = true;
   public boolean makeInternalCritical = true;
-  
+  public boolean noResolve = false;
+
   public static final String[] TREEMODELABELS = {"mac", "ip"};
   public static final int TREEMODE_MAC = 0;
   public static final int TREEMODE_IP = 1;
-  public int treeMode = TREEMODE_MAC;
+  public int treeMode = TREEMODE_IP;
 
   private byte[] countryBuf = new byte[1000];
   public static boolean useGui = true;
   public static boolean connected = false;
-  public static int max_packets_cached = 10000;
+  public static int max_packet_bytes = 20000000;
   private static Pro2beFrame frame;
   public boolean die = false;
   private int listenPort = 4020;
@@ -144,10 +154,10 @@ public class Pro2be implements Runnable {
     addrField.setText(props.getProperty("consoleaddr"));
     snortField.setText(props.getProperty("snortcommand"));
     portField.setText(props.getProperty("consoleport"));
-    String maxPackStr = props.getProperty("max_packets_cached");
+    String maxPackStr = props.getProperty("max_packet_bytes");
     if ( maxPackStr != null ) {
-      max_packets_cached = Integer.parseInt(maxPackStr);
-      System.out.println("max packets cached set to " + max_packets_cached);
+      max_packet_bytes = Integer.parseInt(maxPackStr);
+      System.out.println("max packet bytes set to " + max_packet_bytes);
     }
     String strListen = props.getProperty("listenport");
     if ( strListen != null )
@@ -156,6 +166,7 @@ public class Pro2be implements Runnable {
     doCountry = readBooleanProp(props, "docountry", doCountry);
     snarfPackets = readBooleanProp(props, "snarfpackets", snarfPackets);
     makeInternalCritical = readBooleanProp(props, "makeinternalcritical", makeInternalCritical);
+    noResolve = readBooleanProp(props, "noresolve", noResolve);
 
     String strTreeMode = props.getProperty("treemode");
     if ( strTreeMode != null && strTreeMode.equals("ip") )
@@ -175,10 +186,11 @@ public class Pro2be implements Runnable {
     pw.println("consoleport=" + portField.getText());
     pw.println("listenport=" + String.valueOf(listenPort));
     pw.println("docountry=" + String.valueOf(doCountry));
+    pw.println("noresolve=" + String.valueOf(noResolve));
     pw.println("snarfpackets=" + String.valueOf(snarfPackets));
     pw.println("makeinternalcritical=" + String.valueOf(makeInternalCritical));
     pw.println("snortcommand=" + snortField.getText().replace("\\", "\\\\"));
-    pw.println("max_packets_cached=" + max_packets_cached);
+    pw.println("max_packet_bytes=" + max_packet_bytes);
     pw.println("treemode=" + TREEMODELABELS[treeMode]);
     pw.close();
   }
@@ -188,6 +200,15 @@ public class Pro2be implements Runnable {
     if ( os.indexOf("win") > -1 )
       isWindows = true;
 
+    if ( isWindows ) {
+      tcpdumpField.setText("win" + tcpdumpField.getText());
+      snortField.setText("c:\\snort\\bin\\snort -c c:\\snort\\etc\\snort.conf" + snortField.getText());
+    }
+    else {
+      tcpdumpField.setText("tcp" + tcpdumpField.getText());
+      snortField.setText("snort -c /etc/snort/snort.conf" + snortField.getText());
+    }
+      
     overrideDir = System.getProperty("user.home") + File.separator + ".deepnode";
     createIfNotExist(overrideDir);
     overrideDir += File.separator;
@@ -198,6 +219,91 @@ public class Pro2be implements Runnable {
       if ( treeMode == TREEMODE_IP )
         readInternalNets();
     }
+
+    File domainf = new File(overrideDir + domainFname);
+    if ( domainf.exists() )
+      readDomains(new FileReader(overrideDir + domainFname));
+
+    File filterf = new File(overrideDir + filterFname);
+    if ( filterf.exists() )
+      readFilters(new FileReader(overrideDir + filterFname));
+  }
+
+  private void readDomains ( Reader r ) throws IOException {
+    BufferedReader br = new BufferedReader(r);
+    String line;
+    while ( (line = br.readLine()) != null ) {
+      String[] split = line.split("\\t");
+      domainMap.put(split[0], split[1]);
+    }
+    br.close();
+    System.out.println("loaded " + domainMap.size() + " domain entries");
+  }
+
+  private void readFilters ( Reader r ) throws IOException {
+    BufferedReader br = new BufferedReader(r);
+    String line;
+    LinkedList<String> lines = new LinkedList<String>();
+    while ( (line = br.readLine()) != null )
+      lines.add(line);
+    br.close();
+
+    String[] filtArray = new String[lines.size()];
+    int i = 0;
+    for ( String str : lines ) {
+      filtArray[i] = str;
+      i++;
+    }
+
+    loadFilters(filtArray);
+  }
+
+  private void loadFilters ( String[] filtArray ) {
+    LinkedList<ProbeFilter> filterList = new LinkedList<ProbeFilter>();
+    LinkedList<ProbeFilter> flagList = new LinkedList<ProbeFilter>();
+    for ( String line : filtArray ) {
+      try {
+        ProbeFilter pf = new ProbeFilter(line);
+        if ( pf.isFlag )
+          flagList.add(pf);
+        else
+          filterList.add(pf);
+      }
+      catch ( Exception e ) {
+        System.out.println("exception adding filter {" + line + "}: " + e);
+        e.printStackTrace(System.out);
+      }
+    }
+
+    int filterCount = 0;
+    if ( flagList.size() > 0 ) {
+      flags = new ProbeFilter[flagList.size()];
+      int i = 0;
+      for ( ProbeFilter pf : flagList ) {
+        flags[i] = pf;
+        i++;
+      }
+      filterCount += flagList.size();
+    }
+
+    if ( filterList.size() > 0 ) {
+      filters = new ProbeFilter[filterList.size()];
+      int i = 0;
+      for ( ProbeFilter pf : filterList ) {
+        filters[i] = pf;
+        i++;
+      }
+      filterCount += filterList.size();
+    }
+    System.out.println("loaded " + filterCount + " filters");
+  }
+
+  public void writeDomains () throws IOException {
+    PrintWriter pw = new PrintWriter(new FileWriter(overrideDir + domainFname));
+    for ( Map.Entry<String, String> entry : domainMap.entrySet() )
+      pw.println(entry.getKey() + '\t' + entry.getValue());
+    pw.close();
+    System.out.println("wrote out " + domainMap.size() + " domain entries");
   }
 
   public void readInternalNets () throws IOException, FileNotFoundException {
@@ -248,10 +354,6 @@ public class Pro2be implements Runnable {
       t.start();
     }
 
-    snort = new Snorter(this);
-    snortThread = new Thread(snort);
-    snortThread.start();
-
     attrLookups = new AttrLookup[ATTRLOOKUP_THREAD_COUNT];
     attrLookupThreads = new Thread[ATTRLOOKUP_THREAD_COUNT];
     for ( int i = 0; i < ATTRLOOKUP_THREAD_COUNT; i++ ) {
@@ -265,15 +367,70 @@ public class Pro2be implements Runnable {
     die = true;
   }
 
-  public void setupSniff () throws IOException {
-    startMon();
+  public void cleanupSniffs () {
+    die = true;
+    try {
+      Thread.sleep(2000);
+    }
+    catch ( InterruptedException ie ) {
+      System.out.println("interrupted killing processes: " + ie);
+    }
+    if ( useGui ) {
+      frame.statusLabel.setText("Sniffing stopped.");
+      frame.monitorButt.setText("SNIFF ALL");
+    }
+  }
 
+  public void setupSniff () throws IOException {
+    LinkedList<String> allDevs = getDevList();
+    if ( allDevs == null || allDevs.size() < 1 ) {
+      System.out.println("cannot find devices to sniff");
+      return;
+    }
+
+    die = false;
+    startMon();
+    if ( useGui )
+      frame.monitorButt.setText("STOP");
+
+    loadLocalAddrs();
+
+    for ( String str : allDevs ) {
+      Sniffer sniff = new Sniffer(this, str);
+      Thread sniffThread = new Thread(sniff);
+      sniffThread.start();
+    }
+
+    String snortCommand = snortField.getText();
+    if ( snortCommand != null && snortCommand.length() > 0 ) {
+      snort = new Snorter(this);
+      snortThread = new Thread(snort);
+      snortThread.start();
+    }
+
+    if ( useGui )
+      frame.statusLabel.setText("Sniffing");
+    else
+      System.out.println("sniffing has begun");
+  }
+
+  public LinkedList<String> getDevList () throws IOException {
     String cmd = "tcpdump -D";
     if ( isWindows )
       cmd = "windump -D";
-    Process p = Runtime.getRuntime().exec(cmd);
+    Process p;
+    try {
+      p = Runtime.getRuntime().exec(cmd);
+    }
+    catch ( Exception e ) {
+      System.out.println("error running command {" + cmd + "}: " + e);
+      if ( useGui )
+        frame.statusLabel.setText("command \"" + cmd + "\" fails: " + e);
+      return null;
+    }
+
     BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
-    LinkedList<String> alldevs = new LinkedList<String>();
+    LinkedList<String> allDevs = new LinkedList<String>();
     String line;
     while ( (line = br.readLine()) != null ) {
       int i = line.indexOf(".");
@@ -283,27 +440,73 @@ public class Pro2be implements Runnable {
         if ( dev.startsWith("any ") || dev.equals("lo") )
           System.out.println("ignoring " + line);
         else
-          alldevs.add(intNum);
+          allDevs.add(intNum);
       }
     }
     br.close();
     p.destroy();
-
-    for ( String str : alldevs ) {
-      Sniffer sniff = new Sniffer(this, str);
-      Thread sniffThread = new Thread(sniff);
-      sniffThread.start();
-    }
-
-    if ( useGui )
-      frame.statusLabel.setText("Sniffing");
-    else
-      System.out.println("sniffing has begun");
+    return allDevs;
   }
 
-  public void tcpdump () throws IOException {
+  private void loadLocalAddrs () throws IOException {
+    String cmd = "ifconfig";
+    if ( isWindows )
+      cmd = "ipconfig";
+    Process p;
+    try {
+      p = Runtime.getRuntime().exec(cmd);
+    }
+    catch ( Exception e ) {
+      System.out.println("error running command {" + cmd + "}: " + e);
+      return;
+    }
+
+    BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
+    localIps = new HashSet<String>();
+    String line;
+    while ( (line = br.readLine()) != null ) {
+      if ( isWindows ) {
+        if ( !line.contains("IPv6 Address") && !line.contains("IPv4 Address") )
+          continue;
+      }
+      else {
+        if ( !line.contains("inet addr") && !line.contains("inet6 addr") )
+          continue;
+      }
+
+      int i = line.indexOf(":");
+      if ( i > -1 ) {
+        String ip = null;
+        if ( isWindows ) {
+          ip = line.substring(i + 2, line.length()).toUpperCase();
+          int j = ip.indexOf('%');
+          if ( j > 0 )
+            ip = ip.substring(0, j);
+        }
+        else {
+          if ( line.contains("inet addr") ) {
+            int j = line.indexOf(' ', i + 2);
+            ip = line.substring(i + 1, j);
+          }
+          else {
+            int j = line.indexOf('/', i + 3);
+            ip = line.substring(i + 2, j);
+          }
+        }
+
+        System.out.println("adding {" + ip + "} to local address set");
+        localIps.add(ip);
+      }
+    }
+    br.close();
+    p.destroy();
+  }
+
+  public void tcpdump ( boolean doIngest ) throws IOException {
     startMon();
-    //outQueue.offer("__cg_ingest");
+    if ( doIngest )
+      outQueue.offer("__cg_ingest");
+
     Sniffer sniff = new Sniffer(this, tcpdumpField.getText(), true);
     Thread sniffThread = new Thread(sniff);
     sniffThread.start();
@@ -352,6 +555,78 @@ public class Pro2be implements Runnable {
     loadpw.close();
     sload.close();
     br.close();
+  }
+
+  public void loadSyslog ( String fname ) throws UnknownHostException, IOException, SecurityException,
+                           ParseException, InterruptedException {
+    int port = Integer.parseInt(portField.getText());
+    Socket sload = new Socket(addrField.getText(), port);
+    PrintWriter loadpw = new PrintWriter(new OutputStreamWriter(new DeflaterOutputStream(sload.getOutputStream(), true)));
+    loadpw.println("syslog");
+    loadpw.flush();
+    loadpw.println("__cg_ingest");
+    loadpw.flush();
+
+    SimpleDateFormat ydf = new SimpleDateFormat("yyyy");
+    String year = ydf.format(new java.util.Date());
+    SimpleDateFormat slsdf = new SimpleDateFormat("yyyy MMM dd HH:mm:ss");
+    BufferedReader br = new BufferedReader(new FileReader(fname));
+    String line = null;
+    int nextMsgId = 1;
+    while ( (line = br.readLine()) != null ) {
+      String str = parseSyslog(slsdf, line, nextMsgId, year);
+      nextMsgId++;
+      if ( str != null )
+        loadpw.println(str);
+    }
+
+    loadpw.close();
+    sload.close();
+    br.close();
+  }
+
+  private String parseSyslog ( SimpleDateFormat slsdf, String line, int msgId, String year ) {
+    try {
+      String dateStr = line.substring(0, 15);
+      java.util.Date d = slsdf.parse(year + " " + dateStr);
+      int spaceInd = line.indexOf(' ', 16);
+
+      StringBuilder sb = new StringBuilder();
+      sb.append("sys");
+      sb.append(String.valueOf(msgId));
+      sb.append('\t');
+      sb.append(String.valueOf(d.getTime()));
+      sb.append('\t');
+      sb.append("servers|");
+      sb.append(line.substring(16, spaceInd));
+      sb.append('|');
+
+      int colonInd = line.indexOf(':', spaceInd + 1);
+      String service = line.substring(spaceInd + 1, colonInd);
+      String port = "-";
+      int brackInd = service.indexOf('[');
+      if ( brackInd > 0 ) {
+        port = service.substring(brackInd + 1, service.length() - 1);
+        service = service.substring(0, brackInd);
+      }
+
+      sb.append(service);
+      sb.append('|');
+      sb.append(port);
+      sb.append('\t');
+
+      sb.append("messages|syslog|-|-");
+
+      sb.append("\t10|0\t_i_");
+      sb.append(line.substring(colonInd + 2, line.length()));
+      //System.out.println(sb.toString());
+      return sb.toString();
+    }
+    catch ( Exception e ) {
+      System.out.println("error parsing {" + line + "}: " + e);
+      e.printStackTrace(System.out);
+      return null;
+    }
   }
 
   public void daemon () throws UnknownHostException, IOException, SecurityException,
@@ -446,6 +721,10 @@ public class Pro2be implements Runnable {
           sendPacketDetail(line.substring(13, line.length()), pw);
         else if ( line.startsWith("pong nmap ") )
           launchNMAP(line);
+        else if ( line.startsWith("pong pcap ") )
+          writePcap(line);
+        else if ( line.startsWith("pong push") )
+          receiveFilters(line);
         lastPing = System.currentTimeMillis();
       }
 
@@ -494,6 +773,109 @@ public class Pro2be implements Runnable {
     t.start();
   }
 
+  public static byte uint ( int i ) {
+    if ( i >= 128 )
+      i = (128 - (i - 128)) * -1;
+    return (byte)i;
+  }
+
+  private void writePcap ( String line ) {
+    //System.out.println("writePcap with {" + line + "}");
+    String[] split = line.substring(10, line.length()).split(",");
+    int foundInCache = 0;
+    try {
+      FileOutputStream fos = new FileOutputStream(overrideDir + "dn.pcap");
+      fos.write(uint(0xd4));
+      fos.write(uint(0xc3));
+      fos.write(uint(0xb2));
+      fos.write(uint(0xa1));
+
+      fos.write(uint(0x02));
+      fos.write(uint(0x00));
+      fos.write(uint(0x04));
+      fos.write(uint(0x00));
+
+      for ( int i = 0; i < 8; i++ )
+        fos.write(uint(0x00));
+
+      fos.write(uint(0xff));
+      fos.write(uint(0xff));
+      fos.write(uint(0x00));
+      fos.write(uint(0x00));
+
+      fos.write(uint(0x01));
+      fos.write(uint(0x00));
+      fos.write(uint(0x00));
+      fos.write(uint(0x00));
+
+      for ( String id : split )
+        foundInCache += writePacket(fos, id);
+      fos.close();
+    }
+    catch ( Exception e ) {
+      System.out.println("error dumping pcap to " + overrideDir + "dn.pcap: " + e);
+      e.printStackTrace(System.out);
+    }
+    System.out.println("requested: " + split.length + ", written: " + foundInCache);
+  }
+
+  private int writePacket ( FileOutputStream fos, String strId ) throws IOException {
+    long id = Long.parseLong(strId);
+    PacketHolder pack = packetCache.get(new Long(id));
+    if ( pack == null )
+      return 0;
+
+    long seconds = pack.ts / 1000l;
+    long micros = (pack.ts - seconds) * 1000l;
+    writeLittleFour(fos, seconds);
+    writeLittleFour(fos, micros);
+    writeLittleFour(fos, pack.buf.length);
+    writeLittleFour(fos, pack.buf.length);
+
+    fos.write(pack.buf);
+    return 1;
+  }
+
+  private void writeLittleFour ( FileOutputStream fos, long l ) throws IOException {
+    int b1 = (int)(l / (256 * 256 * 256));
+    l = l - (b1 * 256 * 256 * 256);
+
+    int b2 = (int)(l / (256 * 256));
+    l = l - (b2 * 256 * 256);
+
+    int b3 = (int)(l / 256);
+    int b4 = (int)(l - (b3 * 256));
+
+    fos.write(uint(b4));
+    fos.write(uint(b3));
+    fos.write(uint(b2));
+    fos.write(uint(b1));
+  }
+
+  private void receiveFilters ( String line ) {
+    System.out.println("receiveFilters with {" + line + "}");
+    try {
+      if ( line.equals("pong push") ) {
+        flags = null;
+        filters = null;
+        File f = new File(overrideDir + filterFname);
+        f.delete();
+        return;
+      }
+
+      String[] split = line.substring(10, line.length()).split("\t");
+      loadFilters(split);
+      PrintWriter pw = new PrintWriter(new FileWriter(overrideDir + filterFname));
+      for ( String str : split )
+        pw.println(str);
+      pw.close(); 
+    }
+    catch ( Exception e ) {
+      System.out.println("error receiving filters: " + e);
+      e.printStackTrace(System.out);
+    }
+  }
+
   public static String buildProtPort ( String prot, int port ) {
     if ( port < 1024 )
       return prot + '.' + port;
@@ -527,26 +909,70 @@ public class Pro2be implements Runnable {
       nodeAttrQueue.offer(addr);
   }
 
-  private synchronized long addToCache ( byte[] buf, int len ) {
+  private synchronized long addToCache ( byte[] buf, int len, long ts ) {
+    while ( totalPacketBytes > max_packet_bytes && packetCache.size() > 0 ) {
+      byte[] purgeBuf = packetCache.pollFirstEntry().getValue().buf;
+      totalPacketBytes -= purgeBuf.length;
+    }
+
     if ( buf != null ) {
-      if ( packetCache.size() > max_packets_cached )
-        packetCache.pollFirstEntry();
-      packetCache.put(new Long(nextMsgId), new PacketHolder(buf, len));
+      packetCache.put(new Long(nextMsgId), new PacketHolder(buf, len, ts));
+      totalPacketBytes += buf.length;
     }
     long ret = nextMsgId;
     nextMsgId++;
     return ret;
   }
 
-  private void sendMessage ( String id, String ts, String src, String dst, int len, float pri, String tag ) {
+  private boolean shouldFilter ( String srcp1, String srcp2, String srcp3, String srcp4,
+                                 String dstp1, String dstp2, String dstp3, String dstp4,
+                                 String tag ) {
+    if ( filters == null )
+      return false;
+
+    String[] srcArray = new String[4];
+    srcArray[0] = srcp1;
+    srcArray[1] = srcp2;
+    srcArray[2] = srcp3;
+    srcArray[3] = srcp4;
+
+    String[] dstArray = new String[4];
+    dstArray[0] = dstp1;
+    dstArray[1] = dstp2;
+    dstArray[2] = dstp3;
+    dstArray[3] = dstp4;
+
+    String[] tagArray = null;
+    if ( tag != null )
+      tagArray = tag.split(",");
+
+    if ( flags != null ) {
+      for ( ProbeFilter pf : flags ) {
+        if ( pf.match(srcArray, dstArray, tagArray, tag) )
+          return false;
+      }
+    }
+
+    for ( ProbeFilter pf : filters ) {    
+      if ( pf.match(srcArray, dstArray, tagArray, tag) )
+        return true;
+    }
+
+    return false;
+  }
+
+  private void sendMessage ( String id, String ts,
+		             String srcp1, String srcp2, String srcp3, String srcp4,
+                             String dstp1, String dstp2, String dstp3, String dstp4,
+                             int len, float pri, String tag ) {
     StringBuffer sb = new StringBuffer();
     sb.append(id);
     sb.append('\t');
     sb.append(ts);
     sb.append('\t');
-    sb.append(src);
+    sb.append(buildHier(srcp1, srcp2, srcp3, srcp4));
     sb.append('\t');
-    sb.append(dst);
+    sb.append(buildHier(dstp1, dstp2, dstp3, dstp4));
     sb.append('\t');
     sb.append(String.valueOf(len));
     sb.append('|');
@@ -576,6 +1002,9 @@ public class Pro2be implements Runnable {
   }
 
   private boolean isInternal ( String addr ) {
+    if ( localIps != null && localIps.contains(addr) )
+      return true;
+
     if ( addr.startsWith("192.168") || addr.startsWith("10.") )
       return true;
     else if ( addr.startsWith("172.") && addr.charAt(6) == '.' ) {
@@ -629,6 +1058,9 @@ public class Pro2be implements Runnable {
 
   private String lookupDomain ( String addr ) {
     String domain = "unknown";
+    if ( noResolve )
+      return domain;
+
     try {
       String[] cmd = {"nslookup", addr};
       Process p = Runtime.getRuntime().exec(cmd);
@@ -677,10 +1109,12 @@ public class Pro2be implements Runnable {
 
     public byte[] buf;
     public int len;
+    public long ts;
 
-    public PacketHolder ( byte[] buf, int len ) {
+    public PacketHolder ( byte[] buf, int len, long ts ) {
       this.buf = buf;
       this.len = len;
+      this.ts = ts;
     }
   }
 
@@ -768,7 +1202,7 @@ public class Pro2be implements Runnable {
 
     private byte[] packetBuf = new byte[140000];
     private int packetCacheInd = 0;
-    private byte[] alertLine = new byte[2000];
+    private byte[] alertLine = new byte[5000];
     private int alertInd = 0;
     private Pro2be probe;
 
@@ -902,49 +1336,50 @@ public class Pro2be implements Runnable {
       tag = new StringBuilder();
       packetCacheInd = 0;
 
-      int tsDot = line.indexOf('.');
-      ts = Long.parseLong(line.substring(0, tsDot)) * 1000l;
-      ts += Long.parseLong(line.substring(tsDot + 1, tsDot + 4));
-      //if ( prevTs != -1 && System.currentTimeMillis() - prevTs > 2000 ) {
-      //  System.out.println("big ts gap: " + line);
-      //  System.out.println("prevHeader: " + prevHeader);
-      //}
-      //prevTs = System.currentTimeMillis();
-      //prevHeader = line;
+      try {
+        int tsDot = line.indexOf('.');
+        ts = Long.parseLong(line.substring(0, tsDot)) * 1000l;
+        ts += Long.parseLong(line.substring(tsDot + 1, tsDot + 4));
+        //if ( prevTs != -1 && System.currentTimeMillis() - prevTs > 2000 ) {
+        //  System.out.println("big ts gap: " + line);
+        //  System.out.println("prevHeader: " + prevHeader);
+        //}
+        //prevTs = System.currentTimeMillis();
+        //prevHeader = line;
 
-      int i = line.indexOf(' ', tsDot + 8);
-      src1 = line.substring(tsDot + 8, i);
-      int i2 = line.indexOf(',', i + 3);
-      dst1 = line.substring(i + 3, i2);
+        int i = line.indexOf(' ', tsDot + 8);
+        src1 = line.substring(tsDot + 8, i);
+        int i2 = line.indexOf(',', i + 3);
+        dst1 = line.substring(i + 3, i2);
 
-      int i3 = line.indexOf(' ', i2 + 2);
-      String frameType = line.substring(i2 + 2, i3);
-      if ( frameType.charAt(frameType.length() - 1) == ',' )
-        frameType = frameType.substring(0, frameType.length() - 1);
+        int i3 = line.indexOf(' ', i2 + 2);
+        String frameType = line.substring(i2 + 2, i3);
+        if ( frameType.charAt(frameType.length() - 1) == ',' )
+          frameType = frameType.substring(0, frameType.length() - 1);
 
-      if ( frameType.equals("802.3") ) {
-        int lengthInd = line.indexOf("length", i3 + 1);
-        int colonInd = line.indexOf(':', lengthInd);
-        packetLen = Integer.parseInt(line.substring(lengthInd + 7, colonInd));
-        parse802dot3(line, colonInd);
+        if ( frameType.equals("802.3") ) {
+          int lengthInd = line.indexOf("length", i3 + 1);
+          int colonInd = line.indexOf(':', lengthInd);
+          packetLen = Integer.parseInt(line.substring(lengthInd + 7, colonInd));
+          parse802dot3(line, colonInd);
+        }
+        else {
+          int i4 = line.indexOf(' ', i3 + 1);
+          String frameProt = line.substring(i3 + 1, i4);
+          int lengthInd = line.indexOf("length", i4 + 1);
+          int colonInd = line.indexOf(':', lengthInd);
+          packetLen = Integer.parseInt(line.substring(lengthInd + 7, colonInd));
+
+          if ( frameProt.equals("IPv4") || frameProt.equals("IPv6") )
+            parseIp(line, colonInd);
+          else if ( frameProt.equals("ARP") )
+            parseArp(line, colonInd);
+        }
       }
-      else {
-        int i4 = line.indexOf(' ', i3 + 1);
-        String frameProt = line.substring(i3 + 1, i4);
-        int lengthInd = line.indexOf("length", i4 + 1);
-        int colonInd = line.indexOf(':', lengthInd);
-        packetLen = Integer.parseInt(line.substring(lengthInd + 7, colonInd));
-
-        if ( frameProt.equals("IPv4") || frameProt.equals("IPv6") )
-          parseIp(line, colonInd);
-        else if ( frameProt.equals("ARP") )
-          parseArp(line, colonInd);
+      catch ( Exception e ) {
+        System.out.println("error reading {" + line + "}: " + e);
+        e.printStackTrace(System.out);
       }
-
-      //if ( src3.equals("54.84.70.67") )
-      //  debug = true;
-      //else
-      //  debug = false;
     }
 
     private void sendRecord () {
@@ -954,7 +1389,6 @@ public class Pro2be implements Runnable {
         for ( int i = 0; i < packetCacheInd; i++ )
           buf[i] = packetBuf[i];
       }
-      long id = addToCache(buf, hdrLen);
 
       String str = getTag(buf);
       if ( str != null )
@@ -992,10 +1426,16 @@ public class Pro2be implements Runnable {
         dst2 = dstNet.level2;
       }
 
+      String tagStr = tag.toString();
+      if ( shouldFilter(src1, src2, src3, src4, dst1, dst2, dst3, dst4, tagStr) )
+        return;
+
+      long id = addToCache(buf, hdrLen, ts);
+
       probe.sendMessage(String.valueOf(id), String.valueOf(ts),
-                        probe.buildHier(src1, src2, src3, src4),
-                        probe.buildHier(dst1, dst2, dst3, dst4),
-                        packetLen, 0f, tag.toString());
+                        src1, src2, src3, src4,
+                        dst1, dst2, dst3, dst4,
+                        (packetLen > 0 ? packetLen : 1), 0f, tagStr);
 
       probe.attribNode(src3);
       probe.attribNode(dst3);
@@ -1043,15 +1483,29 @@ public class Pro2be implements Runnable {
 
       int detailInd = line.length();
       int i3 = line.indexOf(' ', i2 + 1);
-      String protRaw = line.substring(i2 + 1, i3).toLowerCase();
-      if ( protRaw.endsWith(",") )
-        protRaw = protRaw.substring(0, protRaw.length() - 1);
+
+      String protRaw = "unknown";
+      if ( i3 > 0 ) {
+        protRaw = line.substring(i2 + 1, i3).toLowerCase();
+        if ( protRaw.endsWith(",") )
+          protRaw = protRaw.substring(0, protRaw.length() - 1);
+      }
 
       String prot = protRaw;
       int lengthInd = line.indexOf("length ", i3);
       if ( lengthInd > -1 ) {
         detailInd = lengthInd - 2;
-        hdrLen = packetLen - Integer.parseInt(line.substring(lengthInd + 7, line.length()));
+        int lenSpaceInd = line.indexOf(' ', lengthInd + 7);
+        if ( lenSpaceInd < 0 )
+          lenSpaceInd = line.length();
+        else
+          detailInd = line.length();
+        try {
+          hdrLen = packetLen - Integer.parseInt(line.substring(lengthInd + 7, lenSpaceInd));
+        }
+        catch ( Exception e ) {
+          System.out.println("error parsing {" + line + "}: " + e);
+        }
       }
 
       if ( prot.equals("udp") )
@@ -1224,7 +1678,7 @@ public class Pro2be implements Runnable {
   class Snorter implements Runnable {
 
     private Pro2be probe;
-    private char[] alertLine = new char[2000];
+    private char[] alertLine = new char[5000];
     private int alertInd = 0;
     private int readerInd;
     // 06/20-15:28:49.352122
@@ -1386,7 +1840,8 @@ public class Pro2be implements Runnable {
       }
 
       if ( mp == null ) {
-        System.out.println("null macpair for " + src3 + "|" + dst3 + ", tries = " + tries);
+	if ( treeMode != TREEMODE_MAC )
+          System.out.println("null macpair for " + src3 + "|" + dst3 + ", tries = " + tries);
         //System.out.println(new String(alertLine, 0, alertInd));
       }
 
@@ -1431,10 +1886,14 @@ public class Pro2be implements Runnable {
         dst2 = dstNet.level2;
       }
 
+      String tagStr = tag.toString();
+      if ( shouldFilter(src1, src2, src3, src4, dst1, dst2, dst3, dst4, tagStr) )
+        return;
+
       probe.sendMessage(id, ts,
-                        probe.buildHier(src1, src2, src3, src4),
-                        probe.buildHier(dst1, dst2, dst3, dst4),
-                        1, pri, tag.toString());
+                        src1, src2, src3, src4,
+                        dst1, dst2, dst3, dst4,
+                        1, pri, tagStr);
 
       probe.attribNode(src3);
       probe.attribNode(dst3);
