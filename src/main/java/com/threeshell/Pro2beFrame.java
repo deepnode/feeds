@@ -31,7 +31,7 @@ public class Pro2beFrame extends JFrame {
   
   public Pro2beFrame () {
        setTitle("Sniffer Feed");
-       setSize(380, 110);
+       setSize(400, 110);
        setLocationRelativeTo(null);
        setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
        getContentPane().setLayout(new BoxLayout(getContentPane(), BoxLayout.Y_AXIS));
@@ -76,7 +76,7 @@ public class Pro2beFrame extends JFrame {
       add(portPanel);
 
       JPanel tcpdumpPanel = new JPanel();
-      tcpdumpPanel.setSize(200, 80);
+      tcpdumpPanel.setSize(240, 80);
       tcpdumpPanel.add(Pro2be.thePro2be.tcpdumpField);
       JButton tcpButt = new JButton("RUN");
       tcpButt.addActionListener(new TcpdumpAction(false));
