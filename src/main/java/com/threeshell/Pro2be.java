@@ -45,6 +45,7 @@ public class Pro2be implements Runnable {
   public JTextField portField = new JTextField("4021", 10);
   public JTextField snortField = new JTextField(" -K none -i 3 -d -A console", 34);
   public JTextField tcpdumpField = new JTextField("dump -tt -n -e -xx -s 65535 -r yourpcap.pcap", 30);
+  public static String loadCommand = "dump -tt -n -e -xx -s 65535 -r ";
 
   private long nextMsgId = 1l;
   private TreeMap<Long, PacketHolder> packetCache = new TreeMap<Long, PacketHolder>();
@@ -508,6 +509,20 @@ public class Pro2be implements Runnable {
       outQueue.offer("__cg_ingest");
 
     Sniffer sniff = new Sniffer(this, tcpdumpField.getText(), true);
+    Thread sniffThread = new Thread(sniff);
+    sniffThread.start();
+  }
+
+  public void loadPcap ( String file ) throws IOException {
+    String cmd = "tcp";
+    if ( isWindows )
+      cmd = "win";
+
+    cmd += loadCommand;
+    cmd += file;
+
+    startMon();
+    Sniffer sniff = new Sniffer(this, cmd, true);
     Thread sniffThread = new Thread(sniff);
     sniffThread.start();
   }
