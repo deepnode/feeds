@@ -32,7 +32,7 @@ public class Pro2beFrame extends JFrame {
   
   public Pro2beFrame () {
        setTitle("Sniffer Feed");
-       setSize(400, 110);
+       setSize(440, 110);
        setLocationRelativeTo(null);
        setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
        getContentPane().setLayout(new BoxLayout(getContentPane(), BoxLayout.Y_AXIS));
@@ -154,7 +154,7 @@ public class Pro2beFrame extends JFrame {
     }
 
     public void actionPerformed ( ActionEvent e ) {
-      setSize(540, 360);
+      setSize(590, 360);
       advanced();
       buttPanel.remove(advancedButt);
       revalidate();
