@@ -26,6 +26,7 @@ public class Pro2beFrame extends JFrame {
   private JLabel snortLabel = new JLabel("Snort command:");
   private JLabel snortInstruct = new JLabel("Must include '-A console'. Make blank if snort not installed.");
   public JButton monitorButt;
+  public JButton pcapButt;
   public JButton advancedButt;
   public JPanel buttPanel;
   
@@ -54,6 +55,9 @@ public class Pro2beFrame extends JFrame {
       monitorButt = new JButton("SNIFF ALL");
       monitorButt.addActionListener(new MonitorAction());
       buttPanel.add(monitorButt);
+      pcapButt = new JButton("Load PCAP");
+      pcapButt.addActionListener(new PcapAction());
+      buttPanel.add(pcapButt);
       advancedButt = new JButton("Advanced Options...");
       advancedButt.addActionListener(new AdvancedAction());
       buttPanel.add(advancedButt);
@@ -120,6 +124,25 @@ public class Pro2beFrame extends JFrame {
       }
       catch ( IOException ie ) {
         System.out.println("error starting/stopping sniffing: " + ie);
+        ie.printStackTrace(System.out);
+      }
+    }
+  }
+
+  class PcapAction implements ActionListener {
+
+    public PcapAction () {
+    }
+
+    public void actionPerformed ( ActionEvent e ) {
+      try {
+        JFileChooser chooser = new JFileChooser();
+        int returnVal = chooser.showOpenDialog(statusLabel);
+        if ( returnVal == JFileChooser.APPROVE_OPTION )
+          Pro2be.thePro2be.loadPcap(chooser.getSelectedFile().getAbsolutePath());
+      }
+      catch ( IOException ie ) {
+        System.out.println("error loading pcap: " + ie);
         ie.printStackTrace(System.out);
       }
     }
