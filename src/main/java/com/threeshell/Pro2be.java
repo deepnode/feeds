@@ -52,6 +52,8 @@ public class Pro2be implements Runnable {
   private long totalPacketBytes = 0l;
   public String overrideDir;
   public String configFname;
+  public String storagePath = null;
+  public long minFreeSpace = 250000000;
 
   public InternalNet[] internalNets = null;
   public HashSet<String> localIps = null;
@@ -120,6 +122,17 @@ public class Pro2be implements Runnable {
         e.printStackTrace(System.out);
       }
     }
+    else if ( args.length > 0 && args[0].equals("collect") ) {
+      try {
+        sniff.useGui = false;
+        sniff.connected = true;
+        sniff.setupSniff();
+        sniff.startCollecting();
+      }
+      catch ( Exception e ) {
+        e.printStackTrace(System.out);
+      }
+    }
     else {
       EventQueue.invokeLater(new Runnable() {
         @Override
@@ -172,6 +185,11 @@ public class Pro2be implements Runnable {
     String strTreeMode = props.getProperty("treemode");
     if ( strTreeMode != null && strTreeMode.equals("ip") )
       treeMode = TREEMODE_IP;
+
+    storagePath = props.getProperty("storagepath");
+    String strMinFree = props.getProperty("minfreespace");
+    if ( strMinFree != null )
+      minFreeSpace = Integer.parseInt(strMinFree);
   }
 
   public static boolean readBooleanProp ( Properties props, String name, boolean curVal ) {
@@ -193,6 +211,9 @@ public class Pro2be implements Runnable {
     pw.println("snortcommand=" + snortField.getText().replace("\\", "\\\\"));
     pw.println("max_packet_bytes=" + max_packet_bytes);
     pw.println("treemode=" + TREEMODELABELS[treeMode]);
+    if ( storagePath != null )
+      pw.println("storagepath=" + storagePath.replace("\\", "\\\\"));
+    pw.println("minfreespace=" + minFreeSpace);
     pw.close();
   }
 
@@ -668,6 +689,27 @@ public class Pro2be implements Runnable {
         Pro2be.thePro2be.connected = true;
         feedSenders.add(fs);
       }
+    }
+  }
+
+  private void startCollecting () throws IOException, GeneralSecurityException {
+    Collector collector = new Collector(this);
+    Thread collectorThread = new Thread(collector);
+    collectorThread.start();
+
+    Purger purger = new Purger(this);
+    Thread purgerThread = new Thread(purger);
+    purgerThread.start();
+
+    ServerSocket ss = HubSock.getServerSocket(listenPort, overrideDir);
+    System.out.println("Collector mode, listening on " + listenPort);
+    while ( true ) {
+      Socket s = ss.accept();
+      PrintWriter pw = new PrintWriter(new OutputStreamWriter(s.getOutputStream()));
+
+      LoadSender fs = new LoadSender(s, pw, this);
+      Thread t = new Thread(fs);
+      t.start();
     }
   }
 
