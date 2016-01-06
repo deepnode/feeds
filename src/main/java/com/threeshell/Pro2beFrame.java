@@ -137,9 +137,10 @@ public class Pro2beFrame extends JFrame {
     public void actionPerformed ( ActionEvent e ) {
       try {
         JFileChooser chooser = new JFileChooser();
+        chooser.setMultiSelectionEnabled(true);
         int returnVal = chooser.showOpenDialog(statusLabel);
         if ( returnVal == JFileChooser.APPROVE_OPTION )
-          Pro2be.thePro2be.loadPcap(chooser.getSelectedFile().getAbsolutePath());
+          Pro2be.thePro2be.loadPcap(chooser.getSelectedFiles());
       }
       catch ( IOException ie ) {
         System.out.println("error loading pcap: " + ie);
