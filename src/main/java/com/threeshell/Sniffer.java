@@ -54,6 +54,8 @@ public class Sniffer implements Runnable, MsgSource {
   private boolean hasMore = true;
   private long curTime;
   private String curMsg;
+  private boolean moveForward = false;
+  private int readCount = 0;
 
   public Sniffer ( Pro2be probe, String dev ) {
     this.probe = probe;
@@ -535,6 +537,9 @@ public class Sniffer implements Runnable, MsgSource {
     if ( !hasMore )
       return false;
 
+    if ( p != null && !moveForward )
+      return true;
+
     try {
       if ( p == null )
         execCommand();
@@ -565,6 +570,10 @@ public class Sniffer implements Runnable, MsgSource {
   }
 
   public String getCurMsg () {
+    moveForward = true;
+    //readCount++;
+    //if ( readCount % 1000 == 0 )
+    //  System.out.println("source " + cmd + " readCount " + readCount);
     return curMsg;
   }
 }
