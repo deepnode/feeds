@@ -148,21 +148,33 @@ public class Sniffer implements Runnable, MsgSource {
     while ( !probe.die ) {
       try {
         execCommand();
+        int waitCount = 0;
         while ( !probe.die ) {
+          if ( waitCount >= 500 ) {
+            System.out.println("{" + cmd + "} waitCount exceeded, terminating");
+            break;
+          }
+
           if ( br.ready() ) {
-            if ( readChar() == STATUS_END )
+            if ( readChar() == STATUS_END ) {
+              System.out.println("{" + cmd + "} end of input reached");
               break;
+            }
           }
           else if ( errBr.ready() ) {
             c = errBr.read();
           }
           else {
+            waitCount++;
             try {
               Thread.sleep(20);
             }
             catch ( Exception e ) {}
           }
         }
+
+        if ( isCustom )
+          break;
       }
       catch ( Exception e ) {
         System.out.println("sniffer thread error: " + e);
@@ -196,10 +208,24 @@ public class Sniffer implements Runnable, MsgSource {
       //prevTs = System.currentTimeMillis();
       //prevHeader = line;
 
-      int i = line.indexOf(' ', tsDot + 8);
-      src1 = line.substring(tsDot + 8, i);
-      int i2 = line.indexOf(',', i + 3);
-      dst1 = line.substring(i + 3, i2);
+      int i;
+      int i2;
+
+      String inOutCheck = line.substring(tsDot + 8, tsDot + 11);
+      if ( inOutCheck.equals(" In") || inOutCheck.equals("Out") ) {
+        i = line.indexOf(' ', tsDot + 12);
+        i2 = i - 1;
+        if ( inOutCheck.equals("Out") )
+          src1 = line.substring(tsDot + 12, i);
+        else
+          dst1 = line.substring(tsDot + 12, i);
+      }
+      else {
+        i = line.indexOf(' ', tsDot + 8);
+        i2 = line.indexOf(',', i + 3);
+        src1 = line.substring(tsDot + 8, i);
+        dst1 = line.substring(i + 3, i2);
+      }
 
       int i3 = line.indexOf(' ', i2 + 2);
       String frameType = line.substring(i2 + 2, i3);
