@@ -20,6 +20,11 @@ import javax.swing.BoxLayout;
 
 public class Pro2beFrame extends JFrame {
 
+  public JTextField addrField = new JTextField("", 30);
+  public JTextField portField = new JTextField("", 10);
+  public JTextField snortField = new JTextField("", 34);
+  public JTextField tcpdumpField = new JTextField("", 30);
+
   public JLabel statusLabel = new JLabel("Click SNIFF ALL to sniff");
   private JLabel addrLabel = new JLabel("Console address:");
   private JLabel portLabel = new JLabel("Console port:");
@@ -51,6 +56,11 @@ public class Pro2beFrame extends JFrame {
             }
         });
 
+      addrField.setText(Pro2be.thePro2be.addrStr);
+      portField.setText(Pro2be.thePro2be.portStr);
+      tcpdumpField.setText(Pro2be.thePro2be.tcpdumpStr);
+      snortField.setText(Pro2be.thePro2be.snortStr);
+
       buttPanel = new JPanel();
       monitorButt = new JButton("SNIFF ALL");
       monitorButt.addActionListener(new MonitorAction());
@@ -71,17 +81,17 @@ public class Pro2beFrame extends JFrame {
       JPanel panel = new JPanel();
       panel.setSize(200, 80);
       panel.add(addrLabel);
-      panel.add(Pro2be.thePro2be.addrField);
+      panel.add(addrField);
       add(panel);
       JPanel portPanel = new JPanel();
       portPanel.setSize(200, 80);
       portPanel.add(portLabel);
-      portPanel.add(Pro2be.thePro2be.portField);
+      portPanel.add(portField);
       add(portPanel);
 
       JPanel tcpdumpPanel = new JPanel();
       tcpdumpPanel.setSize(240, 80);
-      tcpdumpPanel.add(Pro2be.thePro2be.tcpdumpField);
+      tcpdumpPanel.add(tcpdumpField);
       JButton tcpButt = new JButton("RUN");
       tcpButt.addActionListener(new TcpdumpAction(false));
       tcpdumpPanel.add(tcpButt);
@@ -94,7 +104,7 @@ public class Pro2beFrame extends JFrame {
       JPanel snortPanel = new JPanel();
       snortPanel.setSize(200, 80);
       snortPanel.add(snortLabel);
-      snortPanel.add(Pro2be.thePro2be.snortField);
+      snortPanel.add(snortField);
       add(snortPanel);
 
       JPanel buttonPanel = new JPanel();
@@ -110,6 +120,13 @@ public class Pro2beFrame extends JFrame {
       add(buttonPanel);
   }
 
+  public void copyTextFields () {
+    Pro2be.thePro2be.addrStr = addrField.getText();
+    Pro2be.thePro2be.portStr = portField.getText();
+    Pro2be.thePro2be.tcpdumpStr = tcpdumpField.getText();
+    Pro2be.thePro2be.snortStr = snortField.getText();
+  }
+
   class MonitorAction implements ActionListener {
 
     public MonitorAction () {
@@ -117,6 +134,7 @@ public class Pro2beFrame extends JFrame {
 
     public void actionPerformed ( ActionEvent e ) {
       try {
+        copyTextFields();
         if ( monitorButt.getText().startsWith("STOP") )
           Pro2be.thePro2be.cleanupSniffs();
         else
@@ -136,6 +154,7 @@ public class Pro2beFrame extends JFrame {
 
     public void actionPerformed ( ActionEvent e ) {
       try {
+        copyTextFields();
         JFileChooser chooser = new JFileChooser();
         chooser.setMultiSelectionEnabled(true);
         int returnVal = chooser.showOpenDialog(statusLabel);
@@ -172,6 +191,7 @@ public class Pro2beFrame extends JFrame {
 
     public void actionPerformed ( ActionEvent e ) {
       try {
+        copyTextFields();
         Pro2be.thePro2be.tcpdump(doIngest);
       }
       catch ( Exception ie ) {
@@ -188,6 +208,7 @@ public class Pro2beFrame extends JFrame {
 
     public void actionPerformed ( ActionEvent e ) {
       try {
+        copyTextFields();
         JFileChooser chooser = new JFileChooser();
         int returnVal = chooser.showOpenDialog(statusLabel);
         if ( returnVal == JFileChooser.APPROVE_OPTION )
@@ -207,6 +228,7 @@ public class Pro2beFrame extends JFrame {
 
     public void actionPerformed ( ActionEvent e ) {
       try {
+        copyTextFields();
         JFileChooser chooser = new JFileChooser();
         int returnVal = chooser.showOpenDialog(statusLabel);
         if ( returnVal == JFileChooser.APPROVE_OPTION )

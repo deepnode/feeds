@@ -41,10 +41,10 @@ public class Pro2be implements Runnable {
   private String domainFname = "pro2be_domains.txt";
   private String filterFname = "pro2be_filters.txt";
 
-  public JTextField addrField = new JTextField("localhost", 30);
-  public JTextField portField = new JTextField("4021", 10);
-  public JTextField snortField = new JTextField(" -K none -i 3 -d -A console", 34);
-  public JTextField tcpdumpField = new JTextField("dump -tt -n -e -xx -s 65535 -r yourpcap.pcap", 30);
+  public String addrStr = "localhost";
+  public String portStr = "4021";
+  public String snortStr = " -K none -i 3 -d -A console";
+  public String tcpdumpStr = "dump -tt -n -e -xx -s 65535 -r yourpcap.pcap";
   public static String loadCommand = "dump -tt -n -e -xx -s 65535 -r ";
 
   private long nextMsgId = 1l;
@@ -90,6 +90,7 @@ public class Pro2be implements Runnable {
   public boolean die = false;
   private int listenPort = 4020;
   private boolean monStarted = false;
+  public Collector collector;
   
   public static void main ( String[] args ) {
     Pro2be sniff = new Pro2be();
@@ -165,9 +166,9 @@ public class Pro2be implements Runnable {
     Properties props = new Properties();
     props.load(r);
     r.close();
-    addrField.setText(props.getProperty("consoleaddr"));
-    snortField.setText(props.getProperty("snortcommand"));
-    portField.setText(props.getProperty("consoleport"));
+    addrStr = props.getProperty("consoleaddr");
+    snortStr = props.getProperty("snortcommand");
+    portStr = props.getProperty("consoleport");
     String maxPackStr = props.getProperty("max_packet_bytes");
     if ( maxPackStr != null ) {
       max_packet_bytes = Integer.parseInt(maxPackStr);
@@ -189,7 +190,7 @@ public class Pro2be implements Runnable {
     storagePath = props.getProperty("storagepath");
     String strMinFree = props.getProperty("minfreespace");
     if ( strMinFree != null )
-      minFreeSpace = Integer.parseInt(strMinFree);
+      minFreeSpace = Long.parseLong(strMinFree);
   }
 
   public static boolean readBooleanProp ( Properties props, String name, boolean curVal ) {
@@ -201,14 +202,14 @@ public class Pro2be implements Runnable {
 
   private void writeConfigFile () throws IOException {
     PrintWriter pw = new PrintWriter(new FileWriter(overrideDir + configFname));
-    pw.println("consoleaddr=" + addrField.getText());
-    pw.println("consoleport=" + portField.getText());
+    pw.println("consoleaddr=" + addrStr);
+    pw.println("consoleport=" + portStr);
     pw.println("listenport=" + String.valueOf(listenPort));
     pw.println("docountry=" + String.valueOf(doCountry));
     pw.println("noresolve=" + String.valueOf(noResolve));
     pw.println("snarfpackets=" + String.valueOf(snarfPackets));
     pw.println("makeinternalcritical=" + String.valueOf(makeInternalCritical));
-    pw.println("snortcommand=" + snortField.getText().replace("\\", "\\\\"));
+    pw.println("snortcommand=" + snortStr.replace("\\", "\\\\"));
     pw.println("max_packet_bytes=" + max_packet_bytes);
     pw.println("treemode=" + TREEMODELABELS[treeMode]);
     if ( storagePath != null )
@@ -223,12 +224,12 @@ public class Pro2be implements Runnable {
       isWindows = true;
 
     if ( isWindows ) {
-      tcpdumpField.setText("win" + tcpdumpField.getText());
-      snortField.setText("c:\\snort\\bin\\snort -c c:\\snort\\etc\\snort.conf" + snortField.getText());
+      tcpdumpStr = "win" + tcpdumpStr;
+      snortStr = "c:\\snort\\bin\\snort -c c:\\snort\\etc\\snort.conf" + snortStr;
     }
     else {
-      tcpdumpField.setText("tcp" + tcpdumpField.getText());
-      snortField.setText("snort -c /etc/snort/snort.conf" + snortField.getText());
+      tcpdumpStr = "tcp" + tcpdumpStr;
+      snortStr = "snort -c /etc/snort/snort.conf" + snortStr;
     }
       
     overrideDir = System.getProperty("user.home") + File.separator + ".deepnode";
@@ -423,7 +424,7 @@ public class Pro2be implements Runnable {
       sniffThread.start();
     }
 
-    String snortCommand = snortField.getText();
+    String snortCommand = snortStr;
     if ( snortCommand != null && snortCommand.length() > 0 ) {
       snort = new Snorter(this);
       snortThread = new Thread(snort);
@@ -529,7 +530,7 @@ public class Pro2be implements Runnable {
     if ( doIngest )
       outQueue.offer("__cg_ingest");
 
-    Sniffer sniff = new Sniffer(this, tcpdumpField.getText(), true, false);
+    Sniffer sniff = new Sniffer(this, tcpdumpStr, true, false);
     Thread sniffThread = new Thread(sniff);
     sniffThread.start();
   }
@@ -587,8 +588,8 @@ public class Pro2be implements Runnable {
 
   public void loadFile ( String fname ) throws UnknownHostException, IOException, SecurityException,
                            ParseException, InterruptedException {
-    int port = Integer.parseInt(portField.getText());
-    Socket sload = new Socket(addrField.getText(), port);
+    int port = Integer.parseInt(portStr);
+    Socket sload = new Socket(addrStr, port);
     PrintWriter loadpw = new PrintWriter(new OutputStreamWriter(new DeflaterOutputStream(sload.getOutputStream(), true)));
     loadpw.println("playback");
     loadpw.flush();
@@ -608,8 +609,8 @@ public class Pro2be implements Runnable {
 
   public void loadSyslog ( String fname ) throws UnknownHostException, IOException, SecurityException,
                            ParseException, InterruptedException {
-    int port = Integer.parseInt(portField.getText());
-    Socket sload = new Socket(addrField.getText(), port);
+    int port = Integer.parseInt(portStr);
+    Socket sload = new Socket(addrStr, port);
     PrintWriter loadpw = new PrintWriter(new OutputStreamWriter(new DeflaterOutputStream(sload.getOutputStream(), true)));
     loadpw.println("syslog");
     loadpw.flush();
@@ -706,7 +707,7 @@ public class Pro2be implements Runnable {
   }
 
   private void startCollecting () throws IOException, GeneralSecurityException {
-    Collector collector = new Collector(this);
+    collector = new Collector(this);
     Thread collectorThread = new Thread(collector);
     collectorThread.start();
 
@@ -735,8 +736,8 @@ public class Pro2be implements Runnable {
       Socket s = null;
       try {
         outQueue.clear();
-        int port = Integer.parseInt(portField.getText());
-        s = new Socket(addrField.getText(), port);
+        int port = Integer.parseInt(portStr);
+        s = new Socket(addrStr, port);
         pw = new PrintWriter(new OutputStreamWriter(new DeflaterOutputStream(s.getOutputStream(), true)));
         br = new BufferedReader(new InputStreamReader(s.getInputStream()));
         pw.println("pcap_sniff");
@@ -1294,7 +1295,7 @@ public class Pro2be implements Runnable {
         SimpleDateFormat ydf = new SimpleDateFormat("yyyy");
         year = ydf.format(new java.util.Date());
 
-        String cmd = probe.snortField.getText();
+        String cmd = probe.snortStr;
         if ( cmd == null || cmd.trim().length() < 5 )
           return;
 

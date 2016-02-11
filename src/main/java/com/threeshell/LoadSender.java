@@ -5,6 +5,7 @@ import java.net.Socket;
 import java.text.SimpleDateFormat;
 import java.text.ParseException;
 import java.util.zip.GZIPInputStream;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class LoadSender implements Runnable {
 
@@ -20,6 +21,11 @@ public class LoadSender implements Runnable {
   private int curFileInd = 0;
   private String storeRecord = null;
   private String mainPath = null;
+  private boolean sendLive = false;
+  public LinkedBlockingQueue<String> queue;
+  private String curFileName;
+  public String maxFileName = null;
+  public boolean isDead = false;
 
   public LoadSender ( Socket s, PrintWriter pw, Pro2be thePro2be ) {
     this.s = s;
@@ -43,38 +49,100 @@ public class LoadSender implements Runnable {
     String commandStr = fsbr.readLine();
     String[] split = commandStr.split("\t");
     SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm");
-    System.out.println("LoadSender start " + split[1] + ", end " + split[2]);
-    startDate = sdf.parse(split[1]).getTime();
-    endDate = sdf.parse(split[2]).getTime();
-    findStart();
+    System.out.println("LoadSender start " + split[1]);
+    if ( split[1].equals("now") ) {
+      sendLive = true;
+      subscribe(true);
+    }
+    else {
+      startDate = sdf.parse(split[1]).getTime();
+      if ( split[2].equals("now") && !split[1].equals("now") ) {
+        endDate = -1;
+        subscribe(false);
+      }
+      else
+        endDate = sdf.parse(split[2]).getTime();
+      if ( !findStart() ) {
+        System.out.println("starting file not found, going live");
+        sendLive = true;
+        subscribe(true);
+      }
+    }
 
     boolean isGood = true;
-    while ( fspw != null && isGood ) {
-      String str = getNextMsg();
-      if ( str != null ) {
-        if ( str.equals("__continue") )
-          continue;
-        fspw.println(str);
-      }
-      else {
-        if ( curFileBr != null )
-          curFileBr.close();
-        isGood = false;
-      }
-    }
-    System.out.println("closing connection to " + s.getInetAddress());
-    fsbr.close();
-    fspw.close();
-    s.close();
+    try {
+      long lastMsgTime = System.currentTimeMillis();
+      fspw.println("ping");
+      fspw.flush();
+      //System.out.println("sent first ping...");
+      while ( fspw != null && isGood ) {
+        String str = getNextMsg();
+        if ( str != null ) {
+          if ( str.equals("__continue") ) {
+            if ( lastMsgTime + 100l < System.currentTimeMillis() ) {
+              lastMsgTime = System.currentTimeMillis();
+              //System.out.println("sending ping");
+              fspw.println("ping");
+              fspw.flush();
+            }
+            else {
+              try {
+                //System.out.println("sleeping...");
+                Thread.sleep(20);
+              }
+              catch ( Exception e ) {
+                System.out.println("error sleeping in getNextMsg live: " + e);
+              }
+            }
+          }
+          else {
+            lastMsgTime = System.currentTimeMillis();
+            //System.out.println(str);
+            fspw.println(str);
+            fspw.flush();
+          }
+        }
+        else {
+          System.out.println("str is null!!!");
+          if ( curFileBr != null )
+            curFileBr.close();
+          isGood = false;
+        }
+      }
+    }
+    catch ( Exception e ) {
+      e.printStackTrace(System.out);
+    }
+    finally {
+      isDead = true;
+      System.out.println("closing connection to " + s.getInetAddress());
+      fsbr.close();
+      fspw.close();
+      s.close();
+    }
   }
 
-  private String getNextMsg () throws IOException, ParseException {
+  private void subscribe ( boolean justSendLive ) {
+    queue = new LinkedBlockingQueue<String>();
+    theProbe.collector.subscribe(this, justSendLive);
+  }
+
+  private String getNextMsg () throws IOException, ParseException, InterruptedException {
     if ( storeRecord != null ) {
       String temp = storeRecord;
       storeRecord = null;
       return temp;
     }
 
+    if ( sendLive ) {
+      String str = queue.poll();
+      if ( str == null ) {
+        //System.out.println("ls queue size " + queue.size());
+        return "__continue";
+      }
+      return str;
+    }
+      
     String nextLine = null;
     try {
       nextLine = curFileBr.readLine();
@@ -84,17 +152,31 @@ public class LoadSender implements Runnable {
     }
 
     if ( nextLine == null ) {
-      if ( !openNextFile() )
+      if ( checkMaxFileName() || !openNextFile() ) {
+        if ( endDate == -1 ) {
+          sendLive = true;
+          return "__continue";
+        }
         return null;
+      }
       return "__continue";
     }
     else {
       String[] split = nextLine.split("\t");
       long ts = Long.parseLong(split[1]);
-      if ( ts > endDate )
+      if ( endDate != -1 && ts > endDate )
         return null;
       return nextLine;
     }
+  }
+
+  private boolean checkMaxFileName () {
+    if ( maxFileName == null )
+      return false;
+
+    if ( maxFileName.equals(curFileName) )
+      return true;
+    return false;
   }
 
   private boolean openNextFile () throws IOException {
@@ -118,13 +200,17 @@ public class LoadSender implements Runnable {
       }
 
       try {
+        curFileName = makeFileName();
+        if ( curFileName.endsWith("_pend.gz") )
+          continue;
+
         curFileBr = new BufferedReader(new InputStreamReader(new GZIPInputStream(
-                      new FileInputStream(makeFileName()))));
-        System.out.println("loading from " + makeFileName());
+                      new FileInputStream(curFileName))));
+        System.out.println("loading from " + curFileName);
         gotFile = true;
       }
       catch ( Exception e ) {
-        System.out.println("error opening {" + makeFileName() + "}: " + e);
+        System.out.println("error opening {" + curFileName + "}: " + e);
       }
     }
 
@@ -133,7 +219,7 @@ public class LoadSender implements Runnable {
     return true;
   }
 
-  private void findStart () throws IOException, ParseException {
+  private boolean findStart () throws IOException, ParseException {
     mainPath = theProbe.storagePath;
     if ( !mainPath.endsWith(File.separator) )
       mainPath += File.separator;
@@ -147,10 +233,24 @@ public class LoadSender implements Runnable {
     File subDir = new File(mainPath + subdirList[curSubdirInd]);
     fileList = subDir.list();
 
-    while ( curFileInd < fileList.length - 1 &&
-            Long.parseLong(fileList[curFileInd].substring(0, fileList[curFileInd].length() - 3))
-            <= startDate )
+    while ( curFileInd < fileList.length ) {
+      if ( fileList[curFileInd].endsWith("_pend.gz") )
+        return false;
+
+      if ( Long.parseLong(fileList[curFileInd].substring(0, fileList[curFileInd].length() - 3))
+            > startDate ) {
+        curFileInd--;
+        if ( curFileInd < 0 )
+          return false;
+        else
+          break;
+      }
+
       curFileInd++;
+    }
+
+    if ( curFileInd > fileList.length )
+      return false;
 
     curFileBr = new BufferedReader(new InputStreamReader(new GZIPInputStream(
                   new FileInputStream(makeFileName()))));
@@ -160,6 +260,7 @@ public class LoadSender implements Runnable {
       if ( curTs >= startDate )
         break;
     }
+    return true;
   }
 
   private String makeFileName () {

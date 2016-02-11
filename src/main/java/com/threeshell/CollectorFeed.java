@@ -45,6 +45,7 @@ public class CollectorFeed extends JFrame implements Runnable {
   private JTextField endDateField = new JTextField("", 16);
   public String overrideDir;
   public String configFname;
+  private boolean doLive = false;
 
   public static void main ( String[] args ) {
     EventQueue.invokeLater(new Runnable() {
@@ -64,7 +65,7 @@ public class CollectorFeed extends JFrame implements Runnable {
 
   public CollectorFeed () {
        setTitle("Collector Feed");
-       setSize(580, 260);
+       setSize(600, 260);
        setLocationRelativeTo(null);
        setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
        getContentPane().setLayout(new BoxLayout(getContentPane(), BoxLayout.Y_AXIS));
@@ -120,6 +121,9 @@ public class CollectorFeed extends JFrame implements Runnable {
     JButton butt = new JButton("LOAD");
     butt.addActionListener(new MonitorAction(this));
     loadPanel.add(butt);
+    JButton butt2 = new JButton("LIVE");
+    butt2.addActionListener(new LiveAction(this));
+    loadPanel.add(butt2);
     add(loadPanel);
 
     add(statusLabel);
@@ -158,7 +162,7 @@ public class CollectorFeed extends JFrame implements Runnable {
     pw.close();
   }
 
-  public void startMon () {
+  public void startMon ( boolean isLive ) {
     try {
       writeConfigFile();
     }
@@ -167,6 +171,7 @@ public class CollectorFeed extends JFrame implements Runnable {
       e.printStackTrace(System.out);
     }
 
+    doLive = isLive;
     Thread t = new Thread(this);
     t.start();
   }
@@ -196,12 +201,18 @@ public class CollectorFeed extends JFrame implements Runnable {
     Socket s = HubSock.getSocket(hubAddrField.getText(), port, passField.getText(), overrideDir);
     BufferedReader fbr = new BufferedReader(new InputStreamReader(s.getInputStream()));
     PrintWriter fpw = new PrintWriter(new OutputStreamWriter(s.getOutputStream()));
-    fpw.println("load\t" + startDateField.getText() + '\t' + endDateField.getText());
+    if ( !doLive )
+      fpw.println("load\t" + startDateField.getText() + '\t' + endDateField.getText());
+    else
+      fpw.println("load\tnow");
     fpw.flush();
     statusLabel.setText("Connected to collector feed!");
     String line = fbr.readLine();
     while ( line != null ) {
-      pw.println(line);
+      if ( !line.equals("ping") ) {
+        pw.println(line);
+        pw.flush();
+      }
       line = fbr.readLine();
     }
     fpw.close();
@@ -219,7 +230,20 @@ public class CollectorFeed extends JFrame implements Runnable {
     }
 
     public void actionPerformed ( ActionEvent e ) {
-      feed.startMon();
+      feed.startMon(false);
+    }
+  }
+
+  class LiveAction implements ActionListener {
+
+    private CollectorFeed feed;
+
+    public LiveAction ( CollectorFeed feed ) {
+      this.feed = feed;
+    }
+
+    public void actionPerformed ( ActionEvent e ) {
+      feed.startMon(true);
     }
   }
 }

@@ -47,8 +47,8 @@ public class Sniffer implements Runnable, MsgSource {
 
   private String cmd = "";
   private Process p = null;
-  private BufferedReader br;
-  private BufferedReader errBr;
+  private InputStreamReader br;
+  private InputStreamReader errBr;
   private int c;
 
   private boolean hasMore = true;
@@ -86,9 +86,10 @@ public class Sniffer implements Runnable, MsgSource {
     br = null;
     System.out.println("running {" + cmd + "}");
     p = Runtime.getRuntime().exec(cmd);
-    br = new BufferedReader(new InputStreamReader(p.getInputStream()));
-    errBr = new BufferedReader(new InputStreamReader(p.getErrorStream()));
+    br = new InputStreamReader(p.getInputStream());
+    errBr = new InputStreamReader(p.getErrorStream());
     c = -1;
+    alertInd = 0;
   }
 
   private void cleanupCommand () {
@@ -134,9 +135,9 @@ public class Sniffer implements Runnable, MsgSource {
       }
     }
     else {
-      if ( alertInd == alertLine.length )
-        System.out.println("OVERLONG {" + new String(alertLine, 0, alertInd) + "}");
-      else if ( alertInd < alertLine.length ) {
+      //if ( alertInd == alertLine.length )
+      //  System.out.println("OVERLONG {" + new String(alertLine, 0, alertInd) + "}");
+      if ( alertInd < alertLine.length ) {
         alertLine[alertInd] = (byte)c;
         alertInd++;
       }
@@ -149,13 +150,18 @@ public class Sniffer implements Runnable, MsgSource {
       try {
         execCommand();
         int waitCount = 0;
+	int goodCount = 0;
         while ( !probe.die ) {
-          if ( waitCount >= 500 ) {
+          if ( (isCustom && waitCount >= 500) || (!isCustom && waitCount >= 5000) ) {
             System.out.println("{" + cmd + "} waitCount exceeded, terminating");
             break;
           }
 
           if ( br.ready() ) {
+            waitCount = 0;
+            if ( goodCount < 5000 )
+              goodCount++;
+
             if ( readChar() == STATUS_END ) {
               System.out.println("{" + cmd + "} end of input reached");
               break;
@@ -173,8 +179,10 @@ public class Sniffer implements Runnable, MsgSource {
           }
         }
 
-        if ( isCustom )
+        if ( goodCount < 5000 ) {
+          System.out.println("not going to re-run {" + cmd + "}");
           break;
+        }
       }
       catch ( Exception e ) {
         System.out.println("sniffer thread error: " + e);
@@ -386,7 +394,10 @@ public class Sniffer implements Runnable, MsgSource {
       else
         detailInd = line.length();
       try {
-        hdrLen = packetLen - Integer.parseInt(line.substring(lengthInd + 7, lenSpaceInd));
+        String rawLen = line.substring(lengthInd + 7, lenSpaceInd);
+        if ( rawLen.endsWith(":") )
+          rawLen = rawLen.substring(0, rawLen.length() - 1);
+        hdrLen = packetLen - Integer.parseInt(rawLen);
       }
       catch ( Exception e ) {
         System.out.println("error parsing {" + line + "}: " + e);
