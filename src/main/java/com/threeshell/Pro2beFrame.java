@@ -114,6 +114,9 @@ public class Pro2beFrame extends JFrame {
       JButton syslogButt = new JButton("LOAD SYSLOG");
       syslogButt.addActionListener(new SyslogAction());
       buttonPanel.add(syslogButt);
+      JButton ossimButt = new JButton("LOAD OSSIM");
+      ossimButt.addActionListener(new OssimAction());
+      buttonPanel.add(ossimButt);
       JButton writeButt = new JButton("WRITE DOMAINS");
       writeButt.addActionListener(new DomainAction());
       buttonPanel.add(writeButt);
@@ -236,6 +239,26 @@ public class Pro2beFrame extends JFrame {
       }
       catch ( Exception ie ) {
         System.out.println("error loading syslog: " + ie);
+        ie.printStackTrace(System.out);
+      }
+    }
+  }
+
+  class OssimAction implements ActionListener {
+
+    public OssimAction () {
+    }
+
+    public void actionPerformed ( ActionEvent e ) {
+      try {
+        copyTextFields();
+        JFileChooser chooser = new JFileChooser();
+        int returnVal = chooser.showOpenDialog(statusLabel);
+        if ( returnVal == JFileChooser.APPROVE_OPTION )
+          Pro2be.thePro2be.loadOssim(chooser.getSelectedFile().getAbsolutePath());
+      }
+      catch ( Exception ie ) {
+        System.out.println("error loading ossim: " + ie);
         ie.printStackTrace(System.out);
       }
     }

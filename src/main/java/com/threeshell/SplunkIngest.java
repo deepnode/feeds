@@ -50,8 +50,8 @@ public class SplunkIngest extends JFrame {
   private String splunkHost = null;
   private String splunkUser = null;
   private int splunkPort = 8089;
-  public SpelunkerFieldset[] mappings = null;
-  public HashMap<String, SpelunkerFieldset> mappingMap = new HashMap<String, SpelunkerFieldset>();
+  //public SpelunkerFieldset[] mappings = null;
+  //public HashMap<String, SpelunkerFieldset> mappingMap = new HashMap<String, SpelunkerFieldset>();
   public static SplunkIngest splunkIngest = null;
 
   public static void main ( String[] args ) {
@@ -125,12 +125,12 @@ public class SplunkIngest extends JFrame {
     else
       configLabel.setText("need config: " + overrideDir + configFname);
 
-    String mapFname = "spelunker_map.json";
-    File mapf = new File(overrideDir + mapFname);
-    if ( mapf.exists() )
-      readMapFile(new FileReader(overrideDir + mapFname));
-    else
-      configLabel.setText(configLabel.getText() + ", need map: " + overrideDir + mapFname);
+    //String mapFname = "spelunker_map.json";
+    //File mapf = new File(overrideDir + mapFname);
+    //if ( mapf.exists() )
+    //  readMapFile(new FileReader(overrideDir + mapFname));
+    //else
+    //  configLabel.setText(configLabel.getText() + ", need map: " + overrideDir + mapFname);
 
     //String fieldFname = "splunk_fields.txt";
     //File fieldf = new File(overrideDir + fieldFname);
@@ -159,13 +159,13 @@ public class SplunkIngest extends JFrame {
     configLabel.setText("config file parsed");
   }
 
-  private void readMapFile ( Reader r ) throws JsonParseException, JsonMappingException, IOException {
-    ObjectMapper mapper = new ObjectMapper();
-    mappings = mapper.readValue(r, SpelunkerFieldset[].class);
-    for ( SpelunkerFieldset sfs : mappings )
-      mappingMap.put(sfs.source, sfs);
-    configLabel.setText(configLabel.getText() + ", map read");
-  }
+  //private void readMapFile ( Reader r ) throws JsonParseException, JsonMappingException, IOException {
+  //  ObjectMapper mapper = new ObjectMapper();
+  //  mappings = mapper.readValue(r, SpelunkerFieldset[].class);
+  //  for ( SpelunkerFieldset sfs : mappings )
+  //    mappingMap.put(sfs.source, sfs);
+  //  configLabel.setText(configLabel.getText() + ", map read");
+  //}
 
   public String getLocation ( String addr ) {
     String location = "ext";
@@ -250,9 +250,12 @@ public class SplunkIngest extends JFrame {
     private HashMap<String, Integer> extractKeys = new HashMap<String, Integer>();
     private PrintWriter pw = null;
     private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.S zzz");
+    private SplunkEvent se = new SplunkEvent();
 
     public void run () {
       try {
+        HttpService.setSslSecurityProtocol(SSLSecurityProtocol.TLSv1_2);
+
         ServiceArgs loginArgs = new ServiceArgs();
         loginArgs.setUsername(splunkUser);
         loginArgs.setPassword(passwordText.getText());
@@ -277,6 +280,7 @@ public class SplunkIngest extends JFrame {
         pw = new PrintWriter(new OutputStreamWriter(new DeflaterOutputStream(s.getOutputStream(), true)));
         pw.println("splunk_ingest");
         pw.flush();
+        //pw.println("__cg_ingest");
 
         Event event;
         while ( (event = resultsReader.getNextEvent()) != null ) {
@@ -295,11 +299,11 @@ public class SplunkIngest extends JFrame {
       String time = event.get("_time");
       String raw = event.get("_raw");
       String sourceType = event.get("sourcetype");
-      SpelunkerFieldset sfs = mappingMap.get(sourceType);
-      if ( sfs == null ) {
-        System.out.println("no fieldset for sourcetype " + sourceType);
-        return;
-      }
+      //SpelunkerFieldset sfs = mappingMap.get(sourceType);
+      //if ( sfs == null ) {
+      //  System.out.println("no fieldset for sourcetype " + sourceType);
+      //  return;
+      //}
 
       int srcEnd = raw.length();
       if ( srcEnd > BUFMAX )
@@ -330,11 +334,11 @@ public class SplunkIngest extends JFrame {
           sbKey.append(c);
       }
 
-      sfs.process(eventAttrs);
-      sendEvent(time, sfs);
+      se.process(eventAttrs);
+      sendEvent(time, se);
     } 
 
-    private void sendEvent ( String time, SpelunkerFieldset sfs ) throws ParseException {
+    private void sendEvent ( String time, SplunkEvent sfs ) throws ParseException {
       String part1 = time.substring(0, 23);
       String[] part2 = time.substring(24, time.length()).split(" ");
       String tz = "";
@@ -356,11 +360,12 @@ public class SplunkIngest extends JFrame {
 
       sb.append('\t');
       String meas = sfs.resultMeasure;
-      if ( Integer.parseInt(meas) <= 0 )
-        meas = "1";
       sb.append(meas);
       sb.append('|');
       sb.append("0");
+      sb.append('\t');
+      if ( sfs.resultTag != null )
+        sb.append(sfs.resultTag);
 
       String str = sb.toString();
       pw.println(str);

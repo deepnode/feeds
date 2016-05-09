@@ -32,9 +32,11 @@ public class Sniffer implements Runnable, MsgSource {
   private boolean isCustom = false;
   private boolean isSorted = false;
   private String src1 = null;
+  private String src2;
   private String src3;
   private String src4;
   private String dst1;
+  private String dst2;
   private String dst3;
   private String dst4;
   private int packetLen;
@@ -277,36 +279,44 @@ public class Sniffer implements Runnable, MsgSource {
     if ( str != null )
       addTag(str);
 
-    boolean srcInternal = probe.isInternal(src3);
-    boolean dstInternal = probe.isInternal(dst3);
+    if ( probe.fillLowers ) {
+      boolean srcInternal = probe.isInternal(src3);
+      boolean dstInternal = probe.isInternal(dst3);
 
-    if ( probe.treeMode == Pro2be.TREEMODE_IP ) {
-      addTag("_i_srcMac=" + src1);
-      addTag("_i_dstMac=" + dst1);
-      if ( srcInternal )
-        src1 = "internal";
-      else
-        src1 = "external";
+      if ( probe.treeMode == Pro2be.TREEMODE_IP ) {
+        addTag("_i_srcMac=" + src1);
+        addTag("_i_dstMac=" + dst1);
+        if ( srcInternal )
+          src1 = "internal";
+        else
+          src1 = "external";
 
-      if ( dstInternal )
-        dst1 = "internal";
-      else
-        dst1 = "external";
+        if ( dstInternal )
+          dst1 = "internal";
+        else
+          dst1 = "external";
+      }
+
+      src2 = doLoc(src3, srcInternal);
+      dst2 = doLoc(dst3, dstInternal);
+
+      InternalNet srcNet = probe.checkInternalNets(src3);
+      if ( srcNet != null ) {
+        src1 = srcNet.level1;
+        src2 = srcNet.level2;
+      }
+
+      InternalNet dstNet = probe.checkInternalNets(dst3);
+      if ( dstNet != null ) {
+        dst1 = dstNet.level1;
+        dst2 = dstNet.level2;
+      }
     }
-
-    String src2 = doLoc(src3, srcInternal);
-    String dst2 = doLoc(dst3, dstInternal);
-
-    InternalNet srcNet = probe.checkInternalNets(src3);
-    if ( srcNet != null ) {
-      src1 = srcNet.level1;
-      src2 = srcNet.level2;
-    }
-
-    InternalNet dstNet = probe.checkInternalNets(dst3);
-    if ( dstNet != null ) {
-      dst1 = dstNet.level1;
-      dst2 = dstNet.level2;
+    else {
+      src1 = "_";
+      src2 = "_";
+      dst1 = "_";
+      dst2 = "_";
     }
 
     String tagStr = tag.toString();
@@ -434,8 +444,10 @@ public class Sniffer implements Runnable, MsgSource {
       if ( line.charAt(detailStartInd) == ' ' )
         detailStartInd++;
       addTag("_i_details=" + line.substring(detailStartInd, detailInd).replace(',', ';'));
-    }	
-    probe.macCache.put(src3 + "|" + dst3, new MacPair(src1, dst1));
+    }
+
+    if ( probe.treeMode == Pro2be.TREEMODE_MAC )
+      probe.macCache.put(src3 + "|" + dst3, new MacPair(src1, dst1));
   }
 
   private void extractPort ( String ipPort, boolean isDst, String prot ) {

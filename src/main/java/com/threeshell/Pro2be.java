@@ -81,6 +81,7 @@ public class Pro2be implements Runnable {
   public static final int TREEMODE_MAC = 0;
   public static final int TREEMODE_IP = 1;
   public int treeMode = TREEMODE_IP;
+  public static boolean fillLowers = false;
 
   private byte[] countryBuf = new byte[1000];
   public static boolean useGui = true;
@@ -181,6 +182,7 @@ public class Pro2be implements Runnable {
     doCountry = readBooleanProp(props, "docountry", doCountry);
     snarfPackets = readBooleanProp(props, "snarfpackets", snarfPackets);
     makeInternalCritical = readBooleanProp(props, "makeinternalcritical", makeInternalCritical);
+    fillLowers = readBooleanProp(props, "filllowers", fillLowers);
     noResolve = readBooleanProp(props, "noresolve", noResolve);
 
     String strTreeMode = props.getProperty("treemode");
@@ -209,6 +211,7 @@ public class Pro2be implements Runnable {
     pw.println("noresolve=" + String.valueOf(noResolve));
     pw.println("snarfpackets=" + String.valueOf(snarfPackets));
     pw.println("makeinternalcritical=" + String.valueOf(makeInternalCritical));
+    pw.println("filllowers=" + String.valueOf(fillLowers));
     pw.println("snortcommand=" + snortStr.replace("\\", "\\\\"));
     pw.println("max_packet_bytes=" + max_packet_bytes);
     pw.println("treemode=" + TREEMODELABELS[treeMode]);
@@ -633,6 +636,82 @@ public class Pro2be implements Runnable {
     loadpw.close();
     sload.close();
     br.close();
+  }
+
+  public void loadOssim ( String fname ) throws UnknownHostException, IOException, SecurityException,
+                           ParseException, InterruptedException {
+    int port = Integer.parseInt(portStr);
+    Socket sload = new Socket(addrStr, port);
+    PrintWriter loadpw = new PrintWriter(new OutputStreamWriter(new DeflaterOutputStream(sload.getOutputStream(), true)));
+    loadpw.println("ossim");
+    loadpw.flush();
+    loadpw.println("__cg_ingest");
+    loadpw.flush();
+
+    BufferedReader br = new BufferedReader(new FileReader(fname));
+    String line = null;
+    int nextMsgId = 1;
+    while ( (line = br.readLine()) != null ) {
+      String ts = getOssimValue(line, "date");
+      if ( ts == null )
+        continue;
+
+      String srcIp = getOssimValue(line, "src_ip");
+      String dstIp = getOssimValue(line, "dst_ip");
+      String srcPort = getOssimValue(line, "src_port");
+      String dstPort = getOssimValue(line, "dst_port");
+      String data = getOssimValue(line, "data");
+
+      String srcp1 = "internal";
+      String srcp2 = "internal";
+      if ( srcIp == null ) {
+        srcIp = "unknown";
+        srcp1 = "unknown";
+        srcp2 = "unknown";
+      }
+      else if ( !isInternal(srcIp) ) {
+        srcp1 = "external";
+        srcp2 = getLocation(srcIp);
+      }
+
+      String dstp1 = "internal";
+      String dstp2 = "internal";
+      if ( dstIp == null ) {
+        dstIp = "unknown";
+        dstp1 = "unknown";
+        dstp2 = "unknown";
+      }
+      else if ( !isInternal(dstIp) ) {
+        dstp1 = "external";
+        dstp2 = getLocation(dstIp);
+      }
+
+      String tag = null;
+      if ( data != null )
+        tag = "_i_" + data.replace(',', ';');
+
+      String msg = constructMessage(String.valueOf(nextMsgId), ts + "000", srcp1, srcp2, srcIp, srcPort,
+                                    dstp1, dstp2, dstIp, dstPort, 1, 0.0f, tag);
+      nextMsgId++;
+      loadpw.println(msg);
+    }
+
+    loadpw.close();
+    sload.close();
+    br.close();
+  }
+
+  private String getOssimValue ( String line, String tag ) {
+    String searchStr = " " + tag + "='";
+    int i = line.indexOf(searchStr);
+    if ( i < 0 )
+      return null;
+
+    int j = line.indexOf("'", i + searchStr.length());
+    if ( j < 0 )
+      return null;
+
+    return line.substring(i + searchStr.length(), j);
   }
 
   private String parseSyslog ( SimpleDateFormat slsdf, String line, int msgId, String year ) {
@@ -1394,9 +1473,11 @@ public class Pro2be implements Runnable {
       String dstIpRaw = readIPUntilChar(' ', 0);
 
       String src1 = "unknown";
+      String src2 = "unknown";
       String src3 = "unknown";
       String src4 = "unknwon";
       String dst1 = "unknown";
+      String dst2 = "unknown";
       String dst3 = "unknown";
       String dst4 = "unknown";
 
@@ -1424,66 +1505,72 @@ public class Pro2be implements Runnable {
         tag.append(String.valueOf(dstPort));
       }
 
-      MacPair mp = null;
-      int tries = 0;
-      while ( mp == null && tries < 40 ) {
-        mp = macCache.get(src3 + "|" + dst3);
-        tries++;
-        if ( mp == null ) {
-          try {
-            Thread.sleep(100);
+      if ( fillLowers ) {
+        if ( treeMode == TREEMODE_MAC ) {
+          MacPair mp = null;
+          int tries = 0;
+          while ( mp == null && tries < 40 ) {
+            mp = macCache.get(src3 + "|" + dst3);
+            tries++;
+            if ( mp == null ) {
+              try {
+                Thread.sleep(100);
+              }
+              catch ( Exception e ) {
+                System.out.println("error sleeping before macpair retry: " + e);
+              }
+            }
           }
-          catch ( Exception e ) {
-            System.out.println("error sleeping before macpair retry: " + e);
+
+          if ( mp == null )
+            System.out.println("null macpair for " + src3 + "|" + dst3 + ", tries = " + tries);
+          else {
+            src1 = mp.src;
+            dst1 = mp.dst;
           }
         }
+
+        src2 = "internal";
+        boolean srcInternal = probe.isInternal(src3);
+        if ( !srcInternal )
+          src2 = getLocation(src3);
+
+        dst2 = "internal";
+        boolean dstInternal = probe.isInternal(dst3);
+        if ( !dstInternal )
+          dst2 = getLocation(dst3);
+
+        if ( treeMode == TREEMODE_IP ) {
+          //tag.append(",_i_srcMac=" + src1);
+          //tag.append(",_i_dstMac=" + dst1);
+          if ( srcInternal )
+            src1 = "internal";
+          else
+            src1 = "external";
+
+          if ( dstInternal )
+            dst1 = "internal";
+          else
+            dst1 = "external";
+        }
+
+        InternalNet srcNet = checkInternalNets(src3);
+        if ( srcNet != null ) {
+          src1 = srcNet.level1;
+          src2 = srcNet.level2;
+        }
+
+        InternalNet dstNet = checkInternalNets(dst3);
+        if ( dstNet != null ) {
+          dst1 = dstNet.level1;
+          dst2 = dstNet.level2;
+        }
       }
-
-      if ( mp == null ) {
-	if ( treeMode != TREEMODE_MAC )
-          System.out.println("null macpair for " + src3 + "|" + dst3 + ", tries = " + tries);
-        //System.out.println(new String(alertLine, 0, alertInd));
-      }
-
-      if ( mp != null ) {
-        src1 = mp.src;
-        dst1 = mp.dst;
-      }
-
-      String src2 = "internal";
-      boolean srcInternal = probe.isInternal(src3);
-      if ( !srcInternal )
-        src2 = getLocation(src3);
-
-      String dst2 = "internal";
-      boolean dstInternal = probe.isInternal(dst3);
-      if ( !dstInternal )
-        dst2 = getLocation(dst3);
-
-      if ( treeMode == TREEMODE_IP ) {
-        tag.append(",_i_srcMac=" + src1);
-        tag.append(",_i_dstMac=" + dst1);
-        if ( srcInternal )
-          src1 = "internal";
-        else
-          src1 = "external";
-
-        if ( dstInternal )
-          dst1 = "internal";
-        else
-          dst1 = "external";
-      }
-
-      InternalNet srcNet = checkInternalNets(src3);
-      if ( srcNet != null ) {
-        src1 = srcNet.level1;
-        src2 = srcNet.level2;
-      }
-
-      InternalNet dstNet = checkInternalNets(dst3);
-      if ( dstNet != null ) {
-        dst1 = dstNet.level1;
-        dst2 = dstNet.level2;
+      else {
+        src1 = "_";
+        src2 = "_";
+        dst1 = "_";
+        dst2 = "_";
       }
 
       String tagStr = tag.toString();
