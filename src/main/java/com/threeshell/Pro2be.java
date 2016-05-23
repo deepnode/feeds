@@ -245,6 +245,8 @@ public class Pro2be implements Runnable {
       if ( treeMode == TREEMODE_IP )
         readInternalNets();
     }
+    else
+      System.out.println("no config found at " + overrideDir + configFname + ", using defaults");
 
     File domainf = new File(overrideDir + domainFname);
     if ( domainf.exists() )
@@ -816,6 +818,7 @@ public class Pro2be implements Runnable {
       try {
         outQueue.clear();
         int port = Integer.parseInt(portStr);
+        System.out.println("attempting to reach console at " + addrStr + ":" + port);
         s = new Socket(addrStr, port);
         pw = new PrintWriter(new OutputStreamWriter(new DeflaterOutputStream(s.getOutputStream(), true)));
         br = new BufferedReader(new InputStreamReader(s.getInputStream()));
@@ -1026,10 +1029,10 @@ public class Pro2be implements Runnable {
     }
   }
 
-  public static String buildProtPort ( String prot, int port ) {
-    if ( port < 1024 )
+  public static String buildProtPort ( String prot, String port ) {
+    //if ( port < 1024 )
       return prot + '.' + port;
-    return prot;
+    //return prot;
   }
 
   private void commaCheck ( StringBuilder sb, String str ) {
@@ -1490,11 +1493,13 @@ public class Pro2be implements Runnable {
       else {
         int colonInd = srcIpRaw.lastIndexOf(':');
         src3 = cleanIP(srcIpRaw.substring(0, colonInd));
-        int srcPort = Integer.parseInt(srcIpRaw.substring(colonInd + 1, srcIpRaw.length()));
+        //int srcPort = Integer.parseInt(srcIpRaw.substring(colonInd + 1, srcIpRaw.length()));
+        String srcPort = srcIpRaw.substring(colonInd + 1, srcIpRaw.length());
 
         colonInd = dstIpRaw.lastIndexOf(':');
         dst3 = cleanIP(dstIpRaw.substring(0, colonInd));
-        int dstPort = Integer.parseInt(dstIpRaw.substring(colonInd + 1, dstIpRaw.length()));
+        //int dstPort = Integer.parseInt(dstIpRaw.substring(colonInd + 1, dstIpRaw.length()));
+        String dstPort = dstIpRaw.substring(colonInd + 1, dstIpRaw.length());
 
         src4 = buildProtPort(prot, srcPort);
         dst4 = buildProtPort(prot, dstPort);

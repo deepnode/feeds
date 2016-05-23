@@ -218,6 +218,18 @@ public class Sniffer implements Runnable, MsgSource {
       //prevTs = System.currentTimeMillis();
       //prevHeader = line;
 
+      if ( line.indexOf(" INTERRUPT ") != -1 || line.indexOf(" CONTROL ") != -1 ) {
+        src1 = "-";
+        src2 = "-";
+        dst1 = "-";
+        dst2 = "-";
+        dst3 = "misc";
+        dst4 = "misc";
+        src3 = "signals";
+        src4 = line.substring(tsDot + 8, line.length()).replace(',', ';');
+        return;
+      }
+
       int i;
       int i2;
 
@@ -462,7 +474,8 @@ public class Sniffer implements Runnable, MsgSource {
     }
 
     if ( dotCount == 4 || dotCount == 1 ) {
-      int port = Integer.parseInt(ipPort.substring(prevIndex + 1, ipPort.length()));
+      //int port = Integer.parseInt(ipPort.substring(prevIndex + 1, ipPort.length()));
+      String port = ipPort.substring(prevIndex + 1, ipPort.length());
       String ip = ipPort.substring(0, prevIndex);
       if ( isDst ) {
         dst3 = ip;
