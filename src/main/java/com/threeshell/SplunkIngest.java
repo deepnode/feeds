@@ -254,7 +254,7 @@ public class SplunkIngest extends JFrame {
 
     public void run () {
       try {
-        HttpService.setSslSecurityProtocol(SSLSecurityProtocol.TLSv1_2);
+        // WTF HttpService.setSslSecurityProtocol(SSLSecurityProtocol.TLSv1_2);
 
         ServiceArgs loginArgs = new ServiceArgs();
         loginArgs.setUsername(splunkUser);
