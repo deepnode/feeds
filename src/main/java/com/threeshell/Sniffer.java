@@ -312,16 +312,32 @@ public class Sniffer implements Runnable, MsgSource {
       src2 = doLoc(src3, srcInternal);
       dst2 = doLoc(dst3, dstInternal);
 
-      InternalNet srcNet = probe.checkInternalNets(src3);
-      if ( srcNet != null ) {
-        src1 = srcNet.level1;
-        src2 = srcNet.level2;
+      ClientNet srcClientNet = probe.checkClientNets(src3);
+      if ( srcClientNet != null ) {
+        src1 = srcClientNet.level1;
+        src2 = srcClientNet.level2;
+        src3 = srcClientNet.prefix + src3; 
+      }
+      else {
+        InternalNet srcNet = probe.checkInternalNets(src3);
+        if ( srcNet != null ) {
+          src1 = srcNet.level1;
+          src2 = srcNet.level2;
+        }
       }
 
-      InternalNet dstNet = probe.checkInternalNets(dst3);
-      if ( dstNet != null ) {
-        dst1 = dstNet.level1;
-        dst2 = dstNet.level2;
+      ClientNet dstClientNet = probe.checkClientNets(dst3);
+      if ( dstClientNet != null ) {
+        dst1 = dstClientNet.level1;
+        dst2 = dstClientNet.level2;
+        dst3 = dstClientNet.prefix + dst3;
+      }
+      else {
+        InternalNet dstNet = probe.checkInternalNets(dst3);
+        if ( dstNet != null ) {
+          dst1 = dstNet.level1;
+          dst2 = dstNet.level2;
+        }
       }
     }
     else {

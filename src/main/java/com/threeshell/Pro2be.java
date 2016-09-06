@@ -56,6 +56,7 @@ public class Pro2be implements Runnable {
   public long minFreeSpace = 250000000;
 
   public InternalNet[] internalNets = null;
+  public ClientNet[] clientNets = null;
   public HashSet<String> localIps = null;
 
   public LinkedBlockingQueue<String> outQueue = new LinkedBlockingQueue<String>(8000);
@@ -242,8 +243,10 @@ public class Pro2be implements Runnable {
     File configf = new File(overrideDir + configFname);
     if ( configf.exists() ) {
       readConfigFile(new FileReader(overrideDir + configFname));
-      if ( treeMode == TREEMODE_IP )
+      if ( treeMode == TREEMODE_IP ) {
         readInternalNets();
+        readClientNets();
+      }
     }
     else
       System.out.println("no config found at " + overrideDir + configFname + ", using defaults");
@@ -359,8 +362,45 @@ public class Pro2be implements Runnable {
     }
   }
 
+  public void readClientNets () throws IOException, FileNotFoundException {
+    String fname = overrideDir + "client_nets.txt";
+    File netF = new File(fname);
+    if ( !netF.exists() )
+      return;
+
+    LinkedList<ClientNet> ll = new LinkedList<ClientNet>();
+    BufferedReader br = new BufferedReader(new FileReader(fname));
+    String line;
+    while ( (line = br.readLine()) != null ) {
+      String[] split = line.split(",");
+      if ( split.length != 5 )
+        continue;
+      ll.add(new ClientNet(split[0], split[1], split[2], split[3], split[4]));
+    }
+    br.close();
+
+    clientNets = new ClientNet[ll.size()];
+    int i = 0;
+    for ( ClientNet in : ll ) {
+      clientNets[i] = in;
+      i++;
+    }
+  }
+
+  public ClientNet checkClientNets ( String strIP ) {
+    if ( clientNets == null || clientNets.length < 1 )
+      return null;
+
+    int addr = IPUtils.getNumericIP(strIP);
+    for ( ClientNet in : clientNets ) {
+      if ( IPUtils.isInSubnet(addr, in.subnet, in.mask) )
+        return in;
+    }
+    return null;
+  }
+
   public InternalNet checkInternalNets ( String strIP ) {
-    if ( internalNets == null || internalNets.length < 1 )
+    if ( clientNets != null || internalNets == null || internalNets.length < 1 )
       return null;
 
     int addr = IPUtils.getNumericIP(strIP);
@@ -1559,16 +1599,32 @@ public class Pro2be implements Runnable {
             dst1 = "external";
         }
 
-        InternalNet srcNet = checkInternalNets(src3);
-        if ( srcNet != null ) {
-          src1 = srcNet.level1;
-          src2 = srcNet.level2;
+        ClientNet srcClientNet = checkClientNets(src3);
+        if ( srcClientNet != null ) {
+          src1 = srcClientNet.level1;
+          src2 = srcClientNet.level2;
+          src3 = srcClientNet.prefix + src3;
+        }
+        else {
+          InternalNet srcNet = checkInternalNets(src3);
+          if ( srcNet != null ) {
+            src1 = srcNet.level1;
+            src2 = srcNet.level2;
+          }
         }
 
-        InternalNet dstNet = checkInternalNets(dst3);
-        if ( dstNet != null ) {
-          dst1 = dstNet.level1;
-          dst2 = dstNet.level2;
+        ClientNet dstClientNet = checkClientNets(dst3);
+        if ( dstClientNet != null ) {
+          dst1 = dstClientNet.level1;
+          dst2 = dstClientNet.level2;
+          dst3 = dstClientNet.prefix + dst3;
+        }
+        else {
+          InternalNet dstNet = checkInternalNets(dst3);
+          if ( dstNet != null ) {
+            dst1 = dstNet.level1;
+            dst2 = dstNet.level2;
+          }
         }
       }
       else {
