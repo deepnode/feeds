@@ -58,6 +58,7 @@ public class Pro2be implements Runnable {
   public InternalNet[] internalNets = null;
   public ClientNet[] clientNets = null;
   public HashSet<String> localIps = null;
+  public String[] probeTrackLevels = null;
 
   public LinkedBlockingQueue<String> outQueue = new LinkedBlockingQueue<String>(8000);
   public LinkedBlockingQueue<String> nodeAttrQueue = new LinkedBlockingQueue<String>(1000);
@@ -370,7 +371,15 @@ public class Pro2be implements Runnable {
 
     LinkedList<ClientNet> ll = new LinkedList<ClientNet>();
     BufferedReader br = new BufferedReader(new FileReader(fname));
-    String line;
+    String line = br.readLine();
+    String[] levels = line.split("|");
+    if ( levels.length != 4 ) {
+      System.out.println("client_nets.txt first line {" + line + "} is not four levels");
+      System.out.println("example: bobco|corporate|192.168.7.77|probe");
+      System.exit(7);
+    }
+    probeTrackLevels = levels;
+
     while ( (line = br.readLine()) != null ) {
       String[] split = line.split(",");
       if ( split.length != 5 )
@@ -862,8 +871,16 @@ public class Pro2be implements Runnable {
         s = new Socket(addrStr, port);
         pw = new PrintWriter(new OutputStreamWriter(new DeflaterOutputStream(s.getOutputStream(), true)));
         br = new BufferedReader(new InputStreamReader(s.getInputStream()));
-        pw.println("pcap_sniff");
+
+        if ( probeTrackLevels != null ) {
+          pw.println("track " + probeTrackLevels[0] + '|' + probeTrackLevels[1] +
+                     '|' + probeTrackLevels[2] + '|' + probeTrackLevels[3]);
+        }
+        else
+          pw.println("pcap_sniff");
+
         pw.flush();
+
         System.out.println("outbound connection established");
         sendTagDefs();
         connected = true;
