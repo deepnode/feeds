@@ -372,7 +372,7 @@ public class Pro2be implements Runnable {
     LinkedList<ClientNet> ll = new LinkedList<ClientNet>();
     BufferedReader br = new BufferedReader(new FileReader(fname));
     String line = br.readLine();
-    String[] levels = line.split("|");
+    String[] levels = line.split("\\|");
     if ( levels.length != 4 ) {
       System.out.println("client_nets.txt first line {" + line + "} is not four levels");
       System.out.println("example: bobco|corporate|192.168.7.77|probe");
