@@ -1440,38 +1440,34 @@ public class Pro2be implements Runnable {
 
         System.out.println("executing command {" + cmd + "}");
         Process p = Runtime.getRuntime().exec(cmd);
-        BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
-        BufferedReader errBr = new BufferedReader(new InputStreamReader(p.getErrorStream()));
+        InputStream br = p.getInputStream();
+        InputStream errBr = p.getErrorStream();
+        SnortErrorReader ser = new SnortErrorReader(errBr);
+        Thread serThread = new Thread(ser);
+        serThread.start();
+
         int c = -1;
         while ( !probe.die ) {
-          if ( br.ready() ) {
-            c = br.read();
-            if ( c != -1 ) {
-              char castc = (char)c;
-              if ( castc == '\r' || castc == '\n' ) {
-                if ( alertInd > 0 ) {
-                  parseAlert();
-                  alertInd = 0;
-                }
-              }
-              else {
-                alertLine[alertInd] = castc;
-                alertInd++;
+          c = br.read();
+          if ( c != -1 ) {
+            char castc = (char)c;
+            if ( castc == '\r' || castc == '\n' ) {
+              if ( alertInd > 0 ) {
+                parseAlert();
+                alertInd = 0;
               }
             }
-            else
-              break;
-          }
-	  else if ( errBr.ready() ) {
-            c = errBr.read();
+            else {
+              alertLine[alertInd] = castc;
+              alertInd++;
+            }
           }
           else {
-            try {
-              Thread.sleep(20);
-            }
-            catch ( Exception e ) {}
+            System.out.println("about to break out of snorter loop");
+            break;
           }
         }
+        System.out.println("destroying snort process");
         p.destroy();
       }
       catch ( Exception e ) {
@@ -1506,7 +1502,7 @@ public class Pro2be implements Runnable {
     }
 
     private void parseAlert () throws ParseException {
-      //System.out.println("alert {" + new String(alertLine, 0, alertInd) + "}");
+      System.out.println("alert {" + new String(alertLine, 0, alertInd) + "}");
       String id = "s" + nextMsgId;
       nextMsgId++;
       // 06/20-15:28:49.352122  [**] [1:33478:3] UDP happen [**] [Priority: 0] {UDP} 216.58.219.197:443 -> 192.168.1.154:65421
@@ -1924,6 +1920,27 @@ public class Pro2be implements Runnable {
       msgBuilder.append("actions|nmap|nmap|nmap\t");
       msgBuilder.append(prefix);
       msgBuilder.append('|');
+    }
+  }
+
+  class SnortErrorReader implements Runnable {
+
+    InputStream is;
+
+    public SnortErrorReader ( InputStream is ) {
+      this.is = is;
+    }
+
+    public void run () {
+      try {
+        int c;
+        while ( (c = is.read()) != -1 )
+          System.out.print((char)c);
+        is.close();
+      }
+      catch ( Exception e ) {
+        System.out.println("snort error reader exception: " + e);
+      }
     }
   }
 }

@@ -4,7 +4,7 @@ apply plugin: 'application'
 mainClassName = "com.threeshell.Pro2be"
 
 run {
-    args 'canbus.dn'
+    //args 'nogui'
 }
 
 repositories {
