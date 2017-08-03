@@ -1440,31 +1440,59 @@ public class Pro2be implements Runnable {
 
         System.out.println("executing command {" + cmd + "}");
         Process p = Runtime.getRuntime().exec(cmd);
-        InputStream br = p.getInputStream();
-        InputStream errBr = p.getErrorStream();
-        SnortErrorReader ser = new SnortErrorReader(errBr);
-        Thread serThread = new Thread(ser);
-        serThread.start();
+
+        //LinkedList<String> parms = new LinkedList<String>();
+        //String[] split = cmd.split(" ");
+        //for ( String str : split )
+        //  parms.add(str);
+
+	//ProcessBuilder pbuild = new ProcessBuilder(parms);
+	//pbuild.redirectError(ProcessBuilder.Redirect.to(new File("c:\\snort\\errRedir.txt")));
+        //Process p = pbuild.start();
+
+        BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
+        BufferedReader errBr = new BufferedReader(new InputStreamReader(p.getErrorStream()));
+
+        //OutputStream os = p.getOutputStream();
+        //InputStream errBr = new BufferedInputStream(p.getErrorStream(), 20000);
+        //SnortErrorReader ser = new SnortErrorReader(errBr);
+        //Thread serThread = new Thread(ser);
+        //serThread.start();
 
         int c = -1;
         while ( !probe.die ) {
-          c = br.read();
-          if ( c != -1 ) {
-            char castc = (char)c;
-            if ( castc == '\r' || castc == '\n' ) {
-              if ( alertInd > 0 ) {
-                parseAlert();
-                alertInd = 0;
+          if ( br.ready() ) {
+            c = br.read();
+            if ( c != -1 ) {
+              char castc = (char)c;
+              if ( castc == '\r' || castc == '\n' ) {
+                if ( alertInd > 0 ) {
+                  parseAlert();
+                  alertInd = 0;
+                }
+              }
+              else {
+                alertLine[alertInd] = castc;
+                alertInd++;
               }
             }
             else {
-              alertLine[alertInd] = castc;
-              alertInd++;
+              System.out.println("about to break out of snorter loop (-1)");
+              break;
+            }
+          }
+          else if ( errBr.ready() ) {
+            if ( errBr.ready() ) {
+              c = errBr.read();
+              if ( c != -1 )
+                System.out.print((char)c);
             }
           }
           else {
-            System.out.println("about to break out of snorter loop");
-            break;
+            try {
+              Thread.sleep(20);
+            }
+            catch ( Exception e ) {}
           }
         }
         System.out.println("destroying snort process");
@@ -1936,6 +1964,7 @@ public class Pro2be implements Runnable {
         int c;
         while ( (c = is.read()) != -1 )
           System.out.print((char)c);
+        System.out.println(" *** snorter error reader got -1 *** ");
         is.close();
       }
       catch ( Exception e ) {
