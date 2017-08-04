@@ -1467,7 +1467,14 @@ public class Pro2be implements Runnable {
               char castc = (char)c;
               if ( castc == '\r' || castc == '\n' ) {
                 if ( alertInd > 0 ) {
-                  parseAlert();
+                  try {
+                    parseAlert();
+                  }
+                  catch ( Exception e ) {
+                    System.out.println("snorter error parsing alert: " + e);
+                    System.out.println("alert {" + new String(alertLine, 0, alertInd) + "}");
+                    e.printStackTrace(System.out);
+                  }
                   alertInd = 0;
                 }
               }
@@ -1530,10 +1537,10 @@ public class Pro2be implements Runnable {
     }
 
     private void parseAlert () throws ParseException {
-      System.out.println("alert {" + new String(alertLine, 0, alertInd) + "}");
       String id = "s" + nextMsgId;
       nextMsgId++;
       // 06/20-15:28:49.352122  [**] [1:33478:3] UDP happen [**] [Priority: 0] {UDP} 216.58.219.197:443 -> 192.168.1.154:65421
+      // 06/20-15:28:49.352122  [**] [1:33478:3] UDP happen [**] [Classification: Whatever] [Priority: 0] {UDP} 216.58.219.197:443 -> 192.168.1.154:65421
       java.util.Date d = sdf.parse(year + "/" + new String(alertLine, 0, 18));
       String ts = String.valueOf(d.getTime());
       StringBuilder tag = new StringBuilder();
@@ -1543,7 +1550,10 @@ public class Pro2be implements Runnable {
       tag.append(',');
       readerInd++;
       tag.append(readUntilChar('[', 1));
-      readerInd += 16;
+      readUntilChar(']', 0);
+      readerInd++;
+      readUntilChar(']', 0);
+      readerInd += 13;
       float pri = (Integer.parseInt(String.valueOf(alertLine[readerInd])) + 1) * .12f;
       readerInd += 4;
 
