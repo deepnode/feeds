@@ -436,11 +436,14 @@ public class Sniffer implements Runnable, MsgSource {
         if ( rawLen.endsWith(":") )
           rawLen = rawLen.substring(0, rawLen.length() - 1);
         hdrLen = packetLen - Integer.parseInt(rawLen);
+        System.out.println("" + packetLen + "/" + rawLen + " {" + line + "}");
       }
       catch ( Exception e ) {
         System.out.println("error parsing {" + line + "}: " + e);
       }
     }
+    else
+      System.out.println("nohdrlen {" + line + "}");
 
     if ( prot.equals("udp") )
       detailInd = -1;
@@ -584,25 +587,29 @@ public class Sniffer implements Runnable, MsgSource {
   }
 
   private String getTag ( byte[] buf ) {
-    if ( buf == null || buf.length < 40 )
+    if ( buf == null || buf.length < 40 || hdrLen < 1 )
       return null;
 
     int harvested = 0;
     StringBuilder res = new StringBuilder();
-    for ( int i = 30; i < buf.length; i++ ) {
+    for ( int i = hdrLen; i < buf.length; i++ ) {
       char c = (char)buf[i];
       if ( Pro2be.isInRange(c) ) {
-        res.append(c);
+        if ( c == '\r' || c == '\n' )
+          res.append(',');
+        else
+          res.append(c);
+
         if ( debug )
           System.out.print(c);
       }
       else {
-        if ( res.length() >= 4 )
+        //if ( res.length() >= 500 )
           break;
-        res = new StringBuilder();
+        //res = new StringBuilder();
       }
 
-      if ( res.length() >= 10 || i >= 120 )
+      if ( res.length() >= 500 || i >= 520 )
         break;
     }
 

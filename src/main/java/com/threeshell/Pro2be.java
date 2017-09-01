@@ -617,9 +617,12 @@ public class Pro2be implements Runnable {
   }
 
   public static boolean isInRange ( char c ) {
-    if ( (c >= 0x30 && c <= 0x39) ||
-         (c >= 0x41 && c <= 0x5a) ||
-         (c >= 0x61 && c <= 0x7a) )
+    //if ( (c >= 0x30 && c <= 0x39) ||
+    //     (c >= 0x41 && c <= 0x5a) ||
+    //     (c >= 0x61 && c <= 0x7a) )
+    //  return true;
+
+    if ( c == 0xa || (c >= 0x32 && c <= 0x7e) )
       return true;
     return false;
   }
