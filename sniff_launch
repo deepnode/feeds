@@ -1,0 +1,1 @@
+sudo java -cp build/libs/feeds.jar:lib/commons-codec-1.9.jar com.threeshell.Pro2be nogui
