@@ -436,14 +436,14 @@ public class Sniffer implements Runnable, MsgSource {
         if ( rawLen.endsWith(":") )
           rawLen = rawLen.substring(0, rawLen.length() - 1);
         hdrLen = packetLen - Integer.parseInt(rawLen);
-        System.out.println("" + packetLen + "/" + rawLen + " {" + line + "}");
+        //System.out.println("" + packetLen + "/" + rawLen + " {" + line + "}");
       }
       catch ( Exception e ) {
         System.out.println("error parsing {" + line + "}: " + e);
       }
     }
-    else
-      System.out.println("nohdrlen {" + line + "}");
+    //else
+    //  System.out.println("nohdrlen {" + line + "}");
 
     if ( prot.equals("udp") )
       detailInd = -1;
