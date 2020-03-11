@@ -1420,7 +1420,7 @@ public class Pro2be implements Runnable {
   class Snorter implements Runnable {
 
     private Pro2be probe;
-    private char[] alertLine = new char[5000];
+    private char[] alertLine = new char[10000];
     private int alertInd = 0;
     private int readerInd;
     // 06/20-15:28:49.352122
